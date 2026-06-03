@@ -478,6 +478,7 @@ struct SettingsView: View {
     @AppStorage(GameSounds.defaultsKey) private var soundOn = true
     @AppStorage(GameSounds.volumeKey) private var volume = 1.0
     @AppStorage(GameSounds.jumpKey) private var jumpOn = false
+    @AppStorage(Haptics.defaultsKey) private var hapticsOn = false
 
     var body: some View {
         ScrollView {
@@ -520,6 +521,15 @@ struct SettingsView: View {
                             Divider().overlay(Phosphor.line)
                             toggle("JUMP SFX", $jumpOn)
                         }
+                    }
+                }
+
+                TerminalPanel(title: "HAPTICS") {
+                    VStack(alignment: .leading, spacing: 6) {
+                        toggle("WRIST BUZZ", $hapticsOn)
+                        Text("watchOS haptics carry a faint tone. For buzz with NO sound, set the watch to Silent Mode — game sounds still play.")
+                            .font(.system(.caption2, design: .monospaced))
+                            .foregroundStyle(Phosphor.amberDim)
                     }
                 }
 

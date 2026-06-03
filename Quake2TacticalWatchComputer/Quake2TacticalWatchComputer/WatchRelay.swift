@@ -117,17 +117,15 @@ final class WatchRelay: NSObject, ObservableObject {
         guard WCSession.isSupported(), let d = WatchTransport.encode(event) else { return }
         let session = WCSession.default
         guard session.activationState == .activated, session.isWatchAppInstalled else { return }
-        let payload = [WatchTransport.eventKey: d]
-        if session.isReachable {
-            session.sendMessage(payload, replyHandler: nil) { _ in
-                // Delivery failed (watch went away mid-send) — queue it instead.
-                Task { @MainActor in WCSession.default.transferUserInfo(payload) }
-            }
-        } else {
-            // Not reachable: queue for guaranteed background delivery.
-            session.transferUserInfo(payload)
-        }
-        eventsSent += 1   // counted once, at enqueue
+        // Events (sounds, damage, story, objectives) are REAL-TIME. If the watch
+        // isn't reachable this instant, DROP them — never queue via
+        // transferUserInfo: that guarantees delivery, so a whole iPhone-only
+        // session's backlog would dump onto the watch the moment it connects and
+        // replay every sound at once. The watch picks the feed back up live (and
+        // vitals always ride the latest-wins app context, so state stays correct).
+        guard session.isReachable else { return }
+        session.sendMessage([WatchTransport.eventKey: d], replyHandler: nil, errorHandler: nil)
+        eventsSent += 1
     }
 
     private func refreshState(_ session: WCSession) {

@@ -6,10 +6,21 @@
 //  so each event "feels" different without looking at the screen.
 //
 
+import Foundation
 import WatchKit
 
 enum Haptics {
+    /// Persisted master toggle for wrist haptics. Default OFF: every watchOS
+    /// haptic carries a small audible tone (it can't be separated from the buzz
+    /// without putting the watch in Silent Mode), which the user found annoying.
+    /// Mirrors @AppStorage("q2.haptics").
+    static let defaultsKey = "q2.haptics"
+    private static var enabled: Bool {
+        UserDefaults.standard.object(forKey: defaultsKey) as? Bool ?? false
+    }
+
     private static func play(_ type: WKHapticType) {
+        guard enabled else { return }
         WKInterfaceDevice.current().play(type)
     }
 
