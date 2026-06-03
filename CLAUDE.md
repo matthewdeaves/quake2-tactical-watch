@@ -22,12 +22,22 @@ Wire format (authoritative copy in `PLAN.md` §2; mirror, don't diverge):
  "pu":{"icon":"quad","sec":18},"flash":1,"layouts":0,"spec":0}\n
 {"t":"event","kind":"centerprint","msg":"You got the Railgun"}\n
 {"t":"event","kind":"damage","amount":12,"src":"health"}\n
+{"t":"event","kind":"psound","msg":"jump1"}\n            // local-player SFX basename (incl. "pc_up" beep)
+{"t":"event","kind":"objectives","skill":"medium","loc":"Outer Base","obj1":"...","obj2":"","kills":"5/20","goals":"0/0","secrets":"1/2"}\n
 {"t":"meta","level":"Outer Base","items":["Shells","Bullets",...]}\n
 ```
 
 UDP, default port **27999** (distinct from Quake's 27910). The PPC Macs are
 big-endian — the transport is JSON precisely to stay endianness-proof; keep it
 that way.
+
+`objectives` mirrors the F1 help computer (structured fields). It streams
+**automatically** during play: the game DLL silently unicasts the help layout
+tagged `"watchlink "`, and the client forwards it to the companion *without*
+drawing the F1 overlay — so the wrist shows objectives/kills/secrets with no
+in-game interaction. The menu attract-loop demo is gated out (never drives the
+companion), and Bonjour auto-discovery is time-bounded (~30 s) so a phoneless
+game costs no CPU.
 
 ## How to test the feed without the watch
 

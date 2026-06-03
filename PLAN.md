@@ -151,12 +151,34 @@ trivially debuggable with `nc -ul 27999`, and at ~10 Hz × ~250 bytes is free ev
 over AirPort. Two packet kinds:
 
 ```
-{"t":"vitals","hp":87,"ap":50,"ammo":24,"wpn":"Super Shotgun","frags":3,
- "pu":{"icon":"quad","sec":18},"flash":1,"layouts":0,"spec":0}\n
+{"t":"vitals","hp":87,"armor":50,"ammo":24,"sel":"Super Shotgun","frags":3,
+ "flashes":1,"layouts":0,"spec":0,"pu":{"icon":"p_quad","sec":18}}\n
 {"t":"event","kind":"centerprint","msg":"You got the Railgun"}\n
-{"t":"event","kind":"damage","amount":12,"src":"health"}\n
+{"t":"event","kind":"damage","health":1,"armor":0,"ammo":0}\n
+{"t":"event","kind":"psound","msg":"jump1"}\n            // local player sound (basename); incl. "pc_up" computer beep
+{"t":"event","kind":"objectives","skill":"medium","loc":"Outer Base",
+ "obj1":"Find the...","obj2":"","kills":"5/20","goals":"0/0","secrets":"1/2"}\n  // F1 help computer, structured
 {"t":"meta","level":"Outer Base","items":["Shells","Bullets",...]}\n   // on map load
 ```
+
+The `objectives` event mirrors the F1 "help computer" with structured fields
+(parsed engine-side from `HelpComputerMessage`'s fixed layout). It is forwarded
+both when the player presses F1 **and** silently every ~3.2 s during play: the
+game DLL (`WatchLink_ObjectivesMessage`) unicasts the help layout tagged
+`"watchlink "`, which the client patch forwards to the companion WITHOUT storing
+it into `cl.layout` (so the F1 overlay never draws on the player's screen). This
+is why the wrist shows objectives/kills/secrets with no in-game interaction. The
+menu attract-loop demo is gated out so it never drives the companion.
+
+**Field reference (verified against the shipped `cl_watchlink.c`):**
+`vitals` — `hp`,`armor`,`ammo` ints; `sel` = selected-item/weapon name (CS_ITEMS);
+`frags`; `flashes` = STAT_FLASHES bitfield (bit0 health hit, bit1 armor, bit2 ammo);
+`layouts` = STAT_LAYOUTS (bit0 scoreboard, bit1 inventory); `spec` = spectator flag;
+`pu` = `{icon,sec}` where `icon` is the CS_IMAGES powerup-icon name and `sec` the
+countdown. `event/damage` carries `health`/`armor`/`ammo` as 0/1 hit flags (not an
+amount). `meta.items` is the **map's full CS_ITEMS name table**, not a per-player
+owned-inventory snapshot — owned quantities are not yet on the wire (see §6).
+The Swift side mirrors these exactly in `WireProtocol.swift` (iOS + watch copies).
 
 ---
 
