@@ -7,9 +7,10 @@
 //  the exact same Codable structs (WireProtocol.swift) — no hand-mapped
 //  dictionaries to drift out of sync.
 //
-//  • vitals → updateApplicationContext (latest-wins, coalesced, survives lulls)
-//  • meta   → updateApplicationContext (rarely changes; rides alongside vitals)
-//  • event  → sendMessage when reachable (low-latency haptics), else transferUserInfo
+//  • vitals/meta/inventory/objectives → updateApplicationContext
+//        (latest-wins, coalesced, ALWAYS lands when the watch next wakes)
+//  • transient events (damage/centerprint/psound) → sendMessage when reachable
+//        (low-latency haptics/SFX), dropped otherwise — never queued.
 //
 //  Duplicated verbatim in the watch target.
 //
@@ -25,6 +26,14 @@ nonisolated enum WatchTransport {
     /// Data). Rides the context (latest-wins) — it's state, not a transient
     /// event, so it must survive the watch being briefly unreachable.
     static let inventoryKey = "i"
+    /// Application-context key for the latest `Objectives` (JSON Data). Like
+    /// inventory, the F1 mission/kills/secrets are latest-wins STATE, not a
+    /// transient effect — so they ride the coalesced context and ALWAYS land,
+    /// instead of going via sendMessage (which is dropped when the watch isn't
+    /// reachable at that instant). The engine only re-sends objectives when the
+    /// F1 layout changes, so one dropped message used to leave the watch blank
+    /// until the next change.
+    static let objectivesKey = "o"
     /// Message/userInfo key for a discrete `GameEvent` (JSON Data).
     static let eventKey = "e"
 

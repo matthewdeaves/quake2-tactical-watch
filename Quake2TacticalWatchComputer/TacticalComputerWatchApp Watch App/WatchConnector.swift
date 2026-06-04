@@ -95,6 +95,12 @@ final class WatchConnector: NSObject, ObservableObject {
         if let inv = WatchTransport.decode([InventoryItem].self, from: context[WatchTransport.inventoryKey]) {
             inventory = inv
         }
+        // Objectives ride the context (latest-wins) now, so the MISSION page
+        // always reflects the current F1 mission/kills/secrets even if the watch
+        // missed the moment they changed — no longer dropped with the event stream.
+        if let o = WatchTransport.decode(Objectives.self, from: context[WatchTransport.objectivesKey]) {
+            objectives = o
+        }
         lastUpdate = Date()
         markLive()
         pingPhoneAlive()

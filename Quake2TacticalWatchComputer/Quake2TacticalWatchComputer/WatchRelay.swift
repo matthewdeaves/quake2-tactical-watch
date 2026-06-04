@@ -28,6 +28,7 @@ final class WatchRelay: NSObject, ObservableObject {
     private var latestVitals: Vitals?
     private var latestMeta: Meta?
     private var latestInventory: [InventoryItem]?
+    private var latestObjectives: Objectives?
 
     /// When the watch last sent us ANYTHING (vitals-ack ping, heart rate, …).
     /// `isReachable` alone is unreliable: it drops to false whenever the watch
@@ -81,14 +82,28 @@ final class WatchRelay: NSObject, ObservableObject {
             latestVitals = v
             pushContext()
         case .meta(let m):
+            // New map: drop last level's latest-wins state so the coalesced
+            // context can't carry stale objectives/inventory into the new level
+            // before the engine resends them (the watch also clears on its side).
+            if latestMeta?.level != m.level {
+                latestObjectives = nil
+                latestInventory = nil
+            }
             latestMeta = m
             pushContext()
         case .event(let e):
-            // Inventory is latest-wins STATE, not a transient effect: route it
-            // through the coalesced app context (like vitals) so it survives the
-            // watch being briefly unreachable, instead of being dropped.
+            // Inventory and objectives are latest-wins STATE, not transient
+            // effects: route them through the coalesced app context (like vitals)
+            // so they ALWAYS land — surviving the watch being briefly unreachable
+            // — instead of being dropped with the real-time event stream below.
+            // The engine only re-sends objectives when the F1 layout changes, so
+            // a single dropped sendMessage used to leave the watch's MISSION page
+            // blank until the next change. This is that fix.
             if e.isInventory {
                 latestInventory = e.items ?? []
+                pushContext()
+            } else if let o = e.asObjectives {
+                latestObjectives = o
                 pushContext()
             } else {
                 sendEvent(e)
@@ -115,6 +130,9 @@ final class WatchRelay: NSObject, ObservableObject {
         }
         if let inv = latestInventory, let d = WatchTransport.encode(inv) {
             ctx[WatchTransport.inventoryKey] = d
+        }
+        if let o = latestObjectives, let d = WatchTransport.encode(o) {
+            ctx[WatchTransport.objectivesKey] = d
         }
         guard !ctx.isEmpty else { return }
         do {
