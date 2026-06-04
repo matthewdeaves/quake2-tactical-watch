@@ -30,6 +30,10 @@ import Foundation
 
 /// The live status-bar heartbeat (~`watch_rate` Hz, default 10).
 nonisolated struct Vitals: Codable, Equatable, Sendable {
+    /// Which engine is feeding us — "q2" or "q1" — so the HUD can adapt itself
+    /// (Quake 1 has no inventory or objectives computer). Optional so older
+    /// engine builds that omit it still decode.
+    var game: String?
     var hp: Int
     var armor: Int
     var ammo: Int
@@ -70,6 +74,10 @@ nonisolated struct Vitals: Codable, Equatable, Sendable {
 
     /// True on the frame the marine was hit (any subsystem flashed).
     var isHit: Bool { flashes != 0 }
+
+    /// True when this is the Quake 1 feed — the cut-down HUD (no inventory /
+    /// objectives). Unknown/absent `game` is treated as the full Quake II HUD.
+    var isQuake1: Bool { game == "q1" }
 }
 
 /// Sent once per map load: the level name and the item-name lookup table.
@@ -100,6 +108,45 @@ nonisolated struct Objectives: Codable, Equatable, Sendable {
     }
 }
 
+/// One slot of the marine's carried pack: an item name and how many are held.
+/// Quake II only — streamed from the engine's `cl.inventory[]` against the
+/// CS_ITEMS name table (kind == "inventory"). Quake 1 never sends these.
+nonisolated struct InventoryItem: Codable, Equatable, Sendable, Identifiable {
+    var name: String
+    var count: Int
+
+    var id: String { name }
+
+    private enum CodingKeys: String, CodingKey {
+        case name = "n", count = "c"
+    }
+
+    /// Broad class used to group + colour-code the pack readout. Matches the
+    /// baseq2 item vocabulary; anything unrecognised falls to `.other`.
+    enum Category: Int, Sendable { case powerup, key, ammo, weapon, other }
+
+    var category: Category {
+        let n = name.lowercased()
+        let powerups = ["quad", "invulnerab", "rebreather", "environment",
+                        "enviro", "silencer", "adrenaline", "bandolier",
+                        "ammo pack", "power shield", "power screen", "double",
+                        "defender", "hunter", "vengeance", "doppl", "goggles",
+                        "tech", "flag"]
+        if powerups.contains(where: n.contains) { return .powerup }
+        let keys = ["key", "pass", " cd", "cube", "head", "pyramid",
+                    "rune", "sigil", "detonator", "antidote", "explosive charges"]
+        if keys.contains(where: n.contains) { return .key }
+        let ammo = ["shells", "bullets", "cells", "rockets", "grenades",
+                    "slugs", "flechettes", "magslug", "trap", "rounds", "mines"]
+        if ammo.contains(where: n.contains) { return .ammo }
+        let weapons = ["blaster", "shotgun", "machinegun", "chaingun",
+                       "launcher", "hyperblaster", "railgun", "bfg",
+                       "disruptor", "ripper", "phalanx", "rifle", "grapple"]
+        if weapons.contains(where: n.contains) { return .weapon }
+        return .other
+    }
+}
+
 /// A discrete, as-it-happens event.
 nonisolated struct GameEvent: Codable, Equatable, Sendable, Identifiable {
     /// Event class: "damage", "centerprint", … (extensible).
@@ -122,12 +169,16 @@ nonisolated struct GameEvent: Codable, Equatable, Sendable, Identifiable {
     var goals: String?
     var secrets: String?
 
+    // inventory — the carried pack (kind == "inventory", Quake II only).
+    var items: [InventoryItem]?
+
     /// Stable identity for SwiftUI lists (assigned on receipt, not on the wire).
     var id = UUID()
 
     private enum CodingKeys: String, CodingKey {
         case kind, msg, health, armor, ammo
         case skill, loc, obj1, obj2, kills, goals, secrets
+        case items
     }
 
     /// Which subsystems took damage this frame (for damage events).
@@ -142,6 +193,7 @@ nonisolated struct GameEvent: Codable, Equatable, Sendable, Identifiable {
     var isDamage: Bool { kind == "damage" }
     var isCenterprint: Bool { kind == "centerprint" }
     var isObjectives: Bool { kind == "objectives" }
+    var isInventory: Bool { kind == "inventory" }
 
     /// Build the structured F1 help-computer view from this event's fields.
     var asObjectives: Objectives? {

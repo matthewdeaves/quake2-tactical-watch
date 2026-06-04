@@ -17,6 +17,8 @@ final class GameState: ObservableObject {
     @Published private(set) var meta: Meta?
     /// F1 help-computer fields (location + objectives + counts), newest wins.
     @Published private(set) var objectives: Objectives?
+    /// The marine's carried pack (Quake II only), newest wins; empty for Quake 1.
+    @Published private(set) var inventory: [InventoryItem] = []
     /// Rolling log of recent center-print / damage events, newest last.
     @Published private(set) var events: [GameEvent] = []
     /// Wall-clock of the most recent packet of any kind.
@@ -80,7 +82,7 @@ final class GameState: ObservableObject {
             // A new map/level wipes the stale transient log so last level's
             // "crouch here" etc. doesn't hang over. COMMS is derived from events.
             if let cur = meta, cur.level != m.level {
-                events.removeAll(); objectives = nil
+                events.removeAll(); objectives = nil; inventory = []
             }
             meta = m
         case .event(let e):
@@ -94,6 +96,10 @@ final class GameState: ObservableObject {
             }
             if let o = e.asObjectives {
                 objectives = o
+                return
+            }
+            if e.isInventory {
+                inventory = e.items ?? []
                 return
             }
             if e.isDamage { hitCount += 1 }
@@ -111,6 +117,7 @@ final class GameState: ObservableObject {
         guard !live else { return }
         events.removeAll()
         objectives = nil
+        inventory = []
     }
 
     /// Single 1 Hz watchdog — avoids cancel/recreate churn on every packet.
@@ -134,6 +141,7 @@ final class GameState: ObservableObject {
         vitals = nil
         meta = nil
         objectives = nil
+        inventory = []
         events.removeAll()
         lastPacketAt = nil
         packetCount = 0

@@ -21,6 +21,10 @@ nonisolated enum WatchTransport {
     static let vitalsKey = "v"
     /// Application-context key for the latest `Meta` (JSON Data).
     static let metaKey = "m"
+    /// Application-context key for the latest inventory ([InventoryItem] JSON
+    /// Data). Rides the context (latest-wins) — it's state, not a transient
+    /// event, so it must survive the watch being briefly unreachable.
+    static let inventoryKey = "i"
     /// Message/userInfo key for a discrete `GameEvent` (JSON Data).
     static let eventKey = "e"
 

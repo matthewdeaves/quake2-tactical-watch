@@ -16,7 +16,10 @@ struct ContentView: View {
     var body: some View {
         TabView {
             VitalsView()
-            StatusView()
+            // STATUS carries the objectives computer + pack — Quake II only.
+            // On Quake 1 it would be just the sector name, so we drop the page
+            // entirely (the sector folds into COMMS) — no sparse screens.
+            if !conn.isQuake1 { StatusView() }
             CommsView()
             WorkoutControlView()
             SettingsView()
@@ -96,60 +99,53 @@ struct VitalsView: View {
     @Environment(WorkoutKeepAlive.self) private var workout
 
     var body: some View {
-        // Fitted to one screen (no ScrollView) so the vertical page indicator
-        // stays the normal size, matching the other pages.
-        VStack(spacing: 7) {
+        // The primary screen. Fitted to ONE screen (no ScrollView) so the page
+        // indicator stays normal-sized: HP + live heart rate up top, ARMOR/AMMO
+        // as big bracketed counters, the active powerup tucked in if there's one.
+        VStack(spacing: 6) {
             if let v = conn.vitals, conn.live {
                 let c = Phosphor.vital(v.hp)
 
-                // HEALTH — big amber/hazard/danger number + live heartbeat.
+                // HP — the hero number — with the live heartbeat alongside.
                 HStack(alignment: .firstTextBaseline, spacing: 4) {
                     Text("\(v.hp)")
-                        .font(.system(size: 46, weight: .heavy, design: .monospaced))
+                        .font(.system(size: 48, weight: .heavy, design: .monospaced))
                         .foregroundStyle(c)
-                        .phosphorGlow(c, radius: 7, intensity: 0.7)
+                        .phosphorGlow(c, radius: 8, intensity: 0.75)
                         .contentTransition(.numericText())
                         .criticalFlicker(conn.healthSeverity)
+                        .lineLimit(1).minimumScaleFactor(0.5)
                     Text("HP")
-                        .font(.system(.title3, design: .monospaced))
+                        .font(.system(.body, design: .monospaced).weight(.semibold))
                         .foregroundStyle(c.opacity(0.7))
-                    Spacer()
+                    Spacer(minLength: 0)
                     if workout.heartRate > 0 {
                         HeartBeat(bpm: workout.heartRate)
                     }
                 }
-
-                // HEALTH + ARMOR segmented bars.
                 SegmentGauge(label: "HEALTH", value: v.hp, maxValue: 100, color: c)
-                SegmentGauge(label: "ARMOR", value: v.armor, maxValue: 200, color: Phosphor.green)
 
-                // AMMO (cyan) + WEAPON (pale) side by side.
-                HStack(alignment: .firstTextBaseline) {
-                    VStack(alignment: .leading, spacing: 0) {
-                        Text("AMMO")
-                            .font(.system(.caption2, design: .monospaced))
-                            .foregroundStyle(Phosphor.amberDim)
-                        Text("\(v.ammo)")
-                            .font(.system(size: 28, weight: .bold, design: .monospaced))
-                            .foregroundStyle(Phosphor.cyan)
-                            .phosphorGlow(Phosphor.cyan, radius: 5)
-                            .contentTransition(.numericText())
-                    }
-                    Spacer()
-                    VStack(alignment: .trailing, spacing: 0) {
-                        Text("WEAPON")
-                            .font(.system(.caption2, design: .monospaced))
-                            .foregroundStyle(Phosphor.amberDim)
-                        Text(v.sel.isEmpty ? "—" : v.sel.uppercased())
-                            .font(.system(.body, design: .monospaced).weight(.bold))
-                            .foregroundStyle(Phosphor.pale)
-                            .phosphorGlow(Phosphor.pale, radius: 3, intensity: 0.4)
-                            .lineLimit(1).minimumScaleFactor(0.5)
-                    }
+                // ARMOR + AMMO — big counters, each in its own targeting frame.
+                HStack(spacing: 6) {
+                    counter("ARMOR", v.armor, Phosphor.green)
+                    counter("AMMO", v.ammo, Phosphor.cyan)
                 }
-                .padding(.horizontal, 8).padding(.vertical, 6)
-                .overlay(CornerBrackets(length: 7).stroke(Phosphor.amberDim.opacity(0.55), lineWidth: 1))
 
+                // WEAPON — one compact line beneath the counters.
+                HStack(spacing: 5) {
+                    Text("WPN")
+                        .font(.system(.caption2, design: .monospaced))
+                        .foregroundStyle(Phosphor.amberDim)
+                    Text(v.sel.isEmpty ? "—" : v.sel.uppercased())
+                        .font(.system(.footnote, design: .monospaced).weight(.bold))
+                        .foregroundStyle(Phosphor.pale)
+                        .phosphorGlow(Phosphor.pale, radius: 3, intensity: 0.4)
+                        .lineLimit(1).minimumScaleFactor(0.5)
+                    Spacer(minLength: 0)
+                }
+
+                // Powerup countdown (Quake II) — only when one is running, so the
+                // screen stays tight when there isn't.
                 if v.pu.isActive {
                     PowerupBadge(label: v.pu.label, seconds: v.pu.sec)
                 }
@@ -162,6 +158,24 @@ struct VitalsView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .padding(.horizontal, 4)
         .navigationTitle("VITALS")
+    }
+
+    /// A big bracket-framed numeric counter (ARMOR / AMMO) for the vitals screen.
+    private func counter(_ label: String, _ value: Int, _ color: Color) -> some View {
+        VStack(alignment: .leading, spacing: 1) {
+            Text(label)
+                .font(.system(.caption2, design: .monospaced))
+                .foregroundStyle(Phosphor.amberDim)
+            Text("\(value)")
+                .font(.system(size: 32, weight: .heavy, design: .monospaced))
+                .foregroundStyle(color)
+                .phosphorGlow(color, radius: 5)
+                .contentTransition(.numericText())
+                .lineLimit(1).minimumScaleFactor(0.5)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 8).padding(.vertical, 5)
+        .overlay(CornerBrackets(length: 7).stroke(Phosphor.amberDim.opacity(0.55), lineWidth: 1))
     }
 }
 
@@ -268,6 +282,29 @@ struct StatusView: View {
                             }
                         }
 
+                        // The carried pack (Quake II only). Absent on Quake 1, so
+                        // the panel simply doesn't appear — no dead space.
+                        if !conn.inventory.isEmpty {
+                            TerminalPanel(title: "PACK", tint: Phosphor.cyan) {
+                                VStack(alignment: .leading, spacing: 6) {
+                                    ForEach(packGroups(conn.inventory), id: \.label) { g in
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text(g.label)
+                                                .font(.system(.caption2, design: .monospaced).weight(.bold))
+                                                .tracking(1)
+                                                .foregroundStyle(Phosphor.amberDim)
+                                            Text(g.items.map(invLabel).joined(separator: "  "))
+                                                .font(.system(.footnote, design: .monospaced))
+                                                .foregroundStyle(g.color)
+                                                .phosphorGlow(g.color, radius: 2, intensity: 0.4)
+                                                .frame(maxWidth: .infinity, alignment: .leading)
+                                                .fixedSize(horizontal: false, vertical: true)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
                         // Frags are deathmatch-only (always 0 in single-player), so
                         // we only surface them when there's a score / spectating.
                         if let v = conn.vitals, v.frags > 0 || v.spec != 0 {
@@ -328,6 +365,29 @@ struct StatusView: View {
         }
         .font(.system(.footnote, design: .monospaced))
     }
+
+    // MARK: PACK (Quake II carried inventory, grouped + colour-coded)
+
+    private func packGroups(_ items: [InventoryItem])
+        -> [(label: String, color: Color, items: [InventoryItem])] {
+        let order: [(String, Color, InventoryItem.Category)] = [
+            ("POWERUPS", Phosphor.hazard, .powerup),
+            ("KEYS",     Phosphor.cyan,   .key),
+            ("AMMO",     Phosphor.green,  .ammo),
+            ("ARSENAL",  Phosphor.pale,   .weapon),
+            ("MISC",     Phosphor.amber,  .other),
+        ]
+        return order.compactMap { o in
+            let f = items.filter { $0.category == o.2 }
+            return f.isEmpty ? nil : (label: o.0, color: o.1, items: f)
+        }
+    }
+
+    private func invLabel(_ it: InventoryItem) -> String {
+        let n = it.name.uppercased()
+        if it.category == .ammo { return "\(n) \(it.count)" }
+        return it.count > 1 ? "\(n) ×\(it.count)" : n
+    }
 }
 
 // MARK: - Comms (story / pickup messages — the in-fiction help-computer feed)
@@ -340,6 +400,18 @@ struct CommsView: View {
             if conn.live {
                 // Fitted to one screen: newest on top, capped to what fits, so the
                 // page indicator stays the normal size (no internal scroll).
+                VStack(alignment: .leading, spacing: 8) {
+                // Quake 1 has no STATUS page — surface the sector here so the
+                // level name is never lost.
+                if conn.isQuake1 {
+                    TerminalPanel(title: "SECTOR", tint: Phosphor.green) {
+                        Text(conn.sector.uppercased())
+                            .font(.system(.headline, design: .monospaced))
+                            .foregroundStyle(Phosphor.green)
+                            .phosphorGlow(Phosphor.green, radius: 4)
+                            .lineLimit(2).minimumScaleFactor(0.6)
+                    }
+                }
                 TerminalPanel(title: "COMMS LOG") {
                     VStack(alignment: .leading, spacing: 6) {
                         if conn.comms.isEmpty {
@@ -363,6 +435,7 @@ struct CommsView: View {
                             }
                         }
                     }
+                }
                 }
             } else {
                 // Signal lost ⇒ clear the comms log too.

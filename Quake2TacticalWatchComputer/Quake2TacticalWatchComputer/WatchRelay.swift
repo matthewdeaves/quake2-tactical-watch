@@ -27,6 +27,7 @@ final class WatchRelay: NSObject, ObservableObject {
 
     private var latestVitals: Vitals?
     private var latestMeta: Meta?
+    private var latestInventory: [InventoryItem]?
 
     /// When the watch last sent us ANYTHING (vitals-ack ping, heart rate, …).
     /// `isReachable` alone is unreliable: it drops to false whenever the watch
@@ -83,7 +84,15 @@ final class WatchRelay: NSObject, ObservableObject {
             latestMeta = m
             pushContext()
         case .event(let e):
-            sendEvent(e)
+            // Inventory is latest-wins STATE, not a transient effect: route it
+            // through the coalesced app context (like vitals) so it survives the
+            // watch being briefly unreachable, instead of being dropped.
+            if e.isInventory {
+                latestInventory = e.items ?? []
+                pushContext()
+            } else {
+                sendEvent(e)
+            }
         }
     }
 
@@ -103,6 +112,9 @@ final class WatchRelay: NSObject, ObservableObject {
         }
         if let m = latestMeta, let d = WatchTransport.encode(m) {
             ctx[WatchTransport.metaKey] = d
+        }
+        if let inv = latestInventory, let d = WatchTransport.encode(inv) {
+            ctx[WatchTransport.inventoryKey] = d
         }
         guard !ctx.isEmpty else { return }
         do {

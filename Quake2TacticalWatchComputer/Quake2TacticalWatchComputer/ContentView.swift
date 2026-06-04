@@ -205,6 +205,7 @@ private struct DebugHUDView: View {
                             gaugesRow(v)
                             weaponBox(v)
                             if v.pu.isActive { powerup(v.pu) }
+                            if !game.inventory.isEmpty { inventoryBox(game.inventory) }
                         }
                         .padding(12)
                     }
@@ -227,6 +228,7 @@ private struct DebugHUDView: View {
                         gaugesRow(v)
                         weaponBox(v)
                         if v.pu.isActive { powerup(v.pu) }
+                        if !game.inventory.isEmpty { inventoryBox(game.inventory) }
                         if let o = game.objectives, !o.isEmpty { mission(o) }
                         comms
                     }
@@ -328,6 +330,52 @@ private struct DebugHUDView: View {
             .phosphorGlow(Phosphor.hazard, radius: 5)
         }
         .background(HazardStripes())
+    }
+
+    // MARK: Inventory (Quake II pack — powerups, keys, ammo, arsenal)
+
+    private func inventoryBox(_ items: [InventoryItem]) -> some View {
+        // Render order + colour per class. Each non-empty class gets one row.
+        let groups: [(label: String, color: Color, cat: InventoryItem.Category)] = [
+            ("POWERUPS", Phosphor.hazard, .powerup),
+            ("KEYS",     Phosphor.cyan,   .key),
+            ("AMMO",     Phosphor.green,  .ammo),
+            ("ARSENAL",  Phosphor.pale,   .weapon),
+            ("MISC",     Phosphor.amber,  .other),
+        ]
+        return ReadoutBox(title: "INVENTORY", tint: Phosphor.cyan) {
+            VStack(alignment: .leading, spacing: 9) {
+                ForEach(groups, id: \.label) { g in
+                    let line = items.filter { $0.category == g.cat }
+                    if !line.isEmpty { invRow(g.label, g.color, line) }
+                }
+            }
+        }
+    }
+
+    private func invRow(_ label: String, _ color: Color, _ items: [InventoryItem]) -> some View {
+        HStack(alignment: .top, spacing: 9) {
+            Text(label)
+                .font(.system(.caption2, design: .monospaced).weight(.bold)).tracking(1)
+                .foregroundStyle(Phosphor.amberDim)
+                .frame(width: 72, alignment: .leading)
+                .padding(.top, 2)
+            // Joined into one wrapping line — reads like a terminal readout and
+            // avoids a custom flow layout. Ammo shows its amount; everything else
+            // shows ×N only when more than one is held.
+            Text(items.map(invLabel).joined(separator: "   "))
+                .font(.system(.footnote, design: .monospaced).weight(.medium))
+                .foregroundStyle(color)
+                .phosphorGlow(color, radius: 3, intensity: 0.4)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private func invLabel(_ it: InventoryItem) -> String {
+        let n = it.name.uppercased()
+        if it.category == .ammo { return "\(n) \(it.count)" }
+        return it.count > 1 ? "\(n) ×\(it.count)" : n
     }
 
     // MARK: Mission

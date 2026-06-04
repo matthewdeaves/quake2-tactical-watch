@@ -22,6 +22,8 @@ final class WatchConnector: NSObject, ObservableObject {
     @Published private(set) var comms: [GameEvent] = []
     /// The F1 help-computer fields (location + objectives + counts), newest wins.
     @Published private(set) var objectives: Objectives?
+    /// The marine's carried pack (Quake II only), newest wins; empty for Quake 1.
+    @Published private(set) var inventory: [InventoryItem] = []
     @Published private(set) var lastUpdate: Date?
 
     /// Briefly true right after a damage event so the UI can flash red.
@@ -57,6 +59,17 @@ final class WatchConnector: NSObject, ObservableObject {
         return min(1, Double(35 - hp) / 35.0)
     }
 
+    /// The level / sector name: the F1 location if we have it, else the map name.
+    var sector: String {
+        if let loc = objectives?.loc, !loc.isEmpty { return loc }
+        return meta?.level ?? "—"
+    }
+
+    /// Quake 1 feed ⇒ the cut-down HUD (no inventory / objectives), so the UI
+    /// drops the STATUS page and folds the sector into COMMS. Unknown/absent
+    /// `game` is treated as the full Quake II HUD.
+    var isQuake1: Bool { vitals?.isQuake1 ?? false }
+
     func activate() {
         guard WCSession.isSupported() else { return }
         let s = WCSession.default
@@ -75,9 +88,12 @@ final class WatchConnector: NSObject, ObservableObject {
             // A new map/level wipes the stale transient log (COMMS / objectives),
             // so last level's "crouch here" etc. doesn't hang over.
             if let cur = meta, cur.level != m.level {
-                comms.removeAll(); events.removeAll(); objectives = nil
+                comms.removeAll(); events.removeAll(); objectives = nil; inventory = []
             }
             meta = m
+        }
+        if let inv = WatchTransport.decode([InventoryItem].self, from: context[WatchTransport.inventoryKey]) {
+            inventory = inv
         }
         lastUpdate = Date()
         markLive()
@@ -93,6 +109,7 @@ final class WatchConnector: NSObject, ObservableObject {
         comms.removeAll()
         events.removeAll()
         objectives = nil
+        inventory = []
     }
 
     /// Tell the phone the watch is actively showing the game, so the phone mutes
