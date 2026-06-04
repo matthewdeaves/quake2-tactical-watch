@@ -90,7 +90,7 @@ final class GameState: ObservableObject {
             // as a fallback when the watch isn't in use; see audioAllowed).
             if e.kind == "psound" {
                 if let name = e.msg, !name.isEmpty, audioAllowed() {
-                    GameSounds.shared.play(name)
+                    GameSounds.shared.play(name, isQuake1: vitals?.isQuake1 ?? false)
                 }
                 return
             }
@@ -101,6 +101,14 @@ final class GameState: ObservableObject {
             if e.isInventory {
                 inventory = e.items ?? []
                 return
+            }
+            // Collapse consecutive duplicate center-prints: a trigger you're
+            // standing in (common in Quake 1's trigger_multiple message rooms)
+            // re-fires the same message over and over.
+            if e.isCenterprint {
+                let m = e.msg ?? ""
+                if m.isEmpty { return }
+                if events.last(where: { $0.isCenterprint })?.msg == m { return }
             }
             if e.isDamage { hitCount += 1 }
             events.append(e)

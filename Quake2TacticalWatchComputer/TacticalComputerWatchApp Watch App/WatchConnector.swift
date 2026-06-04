@@ -200,7 +200,9 @@ final class WatchConnector: NSObject, ObservableObject {
     private func ingestEvent(_ e: GameEvent) {
         // Player sounds: play the exact Quake II effect the engine reported.
         if e.kind == "psound" {
-            if let name = e.msg, !name.isEmpty { GameSounds.shared.play(name) }
+            if let name = e.msg, !name.isEmpty {
+                GameSounds.shared.play(name, isQuake1: vitals?.isQuake1 ?? false)
+            }
             return
         }
         // F1 help-computer fields (location + objectives + counts).
@@ -215,6 +217,9 @@ final class WatchConnector: NSObject, ObservableObject {
         if e.isDamage {
             triggerDamage()
         } else if e.isCenterprint, let msg = e.msg, !msg.isEmpty {
+            // Collapse consecutive duplicates: a trigger you're standing in
+            // (common in Quake 1's message rooms) re-fires the same line.
+            if comms.last?.msg == msg { return }
             // Real comms (pickups, story, objectives) — log it and tick.
             comms.append(e)
             if comms.count > maxEvents { comms.removeFirst(comms.count - maxEvents) }

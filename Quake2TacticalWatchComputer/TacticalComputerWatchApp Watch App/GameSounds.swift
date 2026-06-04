@@ -51,27 +51,46 @@ final class GameSounds {
     /// category fallback. Honours the master mute; only the *jump grunt is
     /// individually mutable. The help-computer "objectives updated" voice (pc_up)
     /// is always played when the game triggers it — it's in-fiction important.
-    func play(_ name: String) {
+    func play(_ name: String, isQuake1: Bool = false) {
         guard enabled, volume > 0 else { return }
         let n = name.lowercased()
-        if n.hasPrefix("jump") && !jumpEnabled { return }       // *jump grunt
-        guard let p = player(for: resolve(name)) else { return }
+        // The chatty jump grunt is opt-in (Q2 "*jump…", Q1 "plyrjmp8").
+        if (n.hasPrefix("jump") || n.hasPrefix("plyrjmp")) && !jumpEnabled { return }
+        guard let p = player(for: resolve(n, isQuake1: isQuake1)) else { return }
         p.volume = volume
         p.currentTime = 0
         p.play()
     }
 
-    private func resolve(_ name: String) -> String {
-        if Bundle.main.url(forResource: name, withExtension: "wav") != nil { return name }
-        let n = name.lowercased()
-        if n.hasPrefix("pain") { return "pain50_1" }
-        if n.hasPrefix("death") || n.hasPrefix("drown") { return "death1" }
-        if n.hasPrefix("fall") { return "fall1" }
-        if n.hasPrefix("gurp") || n.hasPrefix("airout") { return "gurp1" }
-        if n.contains("health") { return "s_health" }
-        if n.contains("pkup") { return "w_pkup" }
-        if n.hasPrefix("damage") { return "damage" }    // Quad
-        if n.hasPrefix("protect") { return "protect" }  // Invulnerability
+    private func has(_ file: String) -> Bool {
+        Bundle.main.url(forResource: file, withExtension: "wav") != nil
+    }
+
+    /// Quake 1 clips are bundled q1_-prefixed so they never collide with the
+    /// Quake II set (both ship a "damage"/"death1" of different vintage).
+    private func resolve(_ name: String, isQuake1: Bool) -> String {
+        if isQuake1 {
+            let q = "q1_" + name
+            if has(q) { return q }
+            if name.hasPrefix("pain") { return "q1_pain1" }
+            if name.hasPrefix("death") || name.hasPrefix("udeath") || name == "gib" || name.hasPrefix("teledth") { return "q1_death1" }
+            if name.hasPrefix("drown") || name.contains("h2odeath") || name.hasPrefix("gasp") { return "q1_drown1" }
+            if name.contains("inv") { return "q1_inv1" }
+            if name.hasPrefix("protect") { return "q1_protect" }
+            if name.hasPrefix("damage") { return "q1_damage" }
+            if name.contains("health") || name.contains("armor") || name.contains("item") || name.contains("pkup") { return "q1_pkup" }
+            if has(name) { return name }     // app SFX (e.g. glass_break)
+            return "q1_pkup"
+        }
+        if has(name) { return name }
+        if name.hasPrefix("pain") { return "pain50_1" }
+        if name.hasPrefix("death") || name.hasPrefix("drown") { return "death1" }
+        if name.hasPrefix("fall") { return "fall1" }
+        if name.hasPrefix("gurp") || name.hasPrefix("airout") { return "gurp1" }
+        if name.contains("health") { return "s_health" }
+        if name.contains("pkup") { return "w_pkup" }
+        if name.hasPrefix("damage") { return "damage" }    // Quad
+        if name.hasPrefix("protect") { return "protect" }  // Invulnerability
         return name
     }
 
