@@ -38,6 +38,9 @@ struct ContentView: View {
         )
         // CRT warp: random + on tap + on every hit, worsening as HP drops.
         .crtGlitch(trigger: conn.hitCount, severity: conn.healthSeverity)
+        // Light blood splatter on each hit, fading over a few seconds (under the
+        // death crack/skull layers).
+        .overlay(BloodSplat(trigger: conn.hitCount).ignoresSafeArea())
         // Death holds: shattered glass stays + a permanent red skull, until a new
         // game starts. Crack sits under the skulls.
         .overlay(CrackOverlay(seed: conn.deathCount, visible: conn.dead).ignoresSafeArea())
@@ -548,61 +551,48 @@ struct WorkoutControlView: View {
 // MARK: - Settings (last page: audio + build)
 
 struct SettingsView: View {
-    @AppStorage(GameSounds.defaultsKey) private var soundOn = true
+    // Volume is the ONLY audio control that stays on the watch. Game sounds,
+    // jump SFX and wrist haptics moved to the iPhone app (Setup) to cut on-wrist
+    // clutter; they arrive via the app context and are persisted by WatchConnector
+    // into this device's UserDefaults, so GameSounds/Haptics read them unchanged.
     @AppStorage(GameSounds.volumeKey) private var volume = 1.0
-    @AppStorage(GameSounds.jumpKey) private var jumpOn = false
-    @AppStorage(Haptics.defaultsKey) private var hapticsOn = false
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 10) {
-                TerminalPanel(title: "AUDIO") {
-                    VStack(alignment: .leading, spacing: 10) {
-                        toggle("GAME SOUNDS", $soundOn)
-
-                        if soundOn {
-                            // −/+ buttons instead of a slider: the Digital Crown is
-                            // captured by the vertical page TabView, so a slider
-                            // can't be turned. Big tap targets, 10% steps.
-                            VStack(alignment: .leading, spacing: 6) {
-                                HStack {
-                                    Text("VOLUME")
-                                        .font(.system(.caption2, design: .monospaced))
-                                        .foregroundStyle(Phosphor.amberDim)
-                                    Spacer()
-                                    Text("\(Int((volume * 100).rounded()))%")
-                                        .font(.system(.caption, design: .monospaced).weight(.bold))
-                                        .foregroundStyle(Phosphor.green)
-                                        .phosphorGlow(Phosphor.green, radius: 2, intensity: 0.4)
-                                }
-                                HStack(spacing: 8) {
-                                    Button { step(-0.1) } label: {
-                                        Image(systemName: "speaker.minus.fill")
-                                            .frame(maxWidth: .infinity)
-                                    }
-                                    .tint(Phosphor.amberDim)
-                                    Button { step(0.1) } label: {
-                                        Image(systemName: "speaker.plus.fill")
-                                            .frame(maxWidth: .infinity)
-                                    }
-                                    .tint(Phosphor.green)
-                                }
-                                .font(.system(.body, design: .monospaced))
-                                VolumeBars(level: volume)
-                            }
-
-                            Divider().overlay(Phosphor.line)
-                            toggle("JUMP SFX", $jumpOn)
-                        }
-                    }
-                }
-
-                TerminalPanel(title: "HAPTICS") {
+                TerminalPanel(title: "VOLUME") {
+                    // −/+ buttons, not a slider: the Digital Crown is captured by
+                    // the vertical page TabView, so a slider can't be turned. Big
+                    // tap targets, 10% steps.
                     VStack(alignment: .leading, spacing: 6) {
-                        toggle("WRIST BUZZ", $hapticsOn)
-                        Text("watchOS haptics carry a faint tone. For buzz with NO sound, set the watch to Silent Mode — game sounds still play.")
+                        HStack {
+                            Text("LEVEL")
+                                .font(.system(.caption2, design: .monospaced))
+                                .foregroundStyle(Phosphor.amberDim)
+                            Spacer()
+                            Text("\(Int((volume * 100).rounded()))%")
+                                .font(.system(.caption, design: .monospaced).weight(.bold))
+                                .foregroundStyle(Phosphor.green)
+                                .phosphorGlow(Phosphor.green, radius: 2, intensity: 0.4)
+                        }
+                        HStack(spacing: 8) {
+                            Button { step(-0.1) } label: {
+                                Image(systemName: "speaker.minus.fill")
+                                    .frame(maxWidth: .infinity)
+                            }
+                            .tint(Phosphor.amberDim)
+                            Button { step(0.1) } label: {
+                                Image(systemName: "speaker.plus.fill")
+                                    .frame(maxWidth: .infinity)
+                            }
+                            .tint(Phosphor.green)
+                        }
+                        .font(.system(.body, design: .monospaced))
+                        VolumeBars(level: volume)
+                        Text("Game sounds, jump SFX and haptics are set in the iPhone app (Setup).")
                             .font(.system(.caption2, design: .monospaced))
                             .foregroundStyle(Phosphor.amberDim)
+                            .padding(.top, 2)
                     }
                 }
 
@@ -621,15 +611,6 @@ struct SettingsView: View {
             .padding(.horizontal, 4)
         }
         .navigationTitle("SETTINGS")
-    }
-
-    private func toggle(_ label: String, _ binding: Binding<Bool>) -> some View {
-        Toggle(isOn: binding) {
-            Text(label)
-                .font(.system(.footnote, design: .monospaced))
-                .foregroundStyle(Phosphor.amber)
-        }
-        .tint(Phosphor.green)
     }
 
     /// Adjust volume in clean 10% steps, snapped and clamped to 0…1.

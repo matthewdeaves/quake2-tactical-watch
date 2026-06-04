@@ -211,11 +211,99 @@ struct CrackOverlay: View {
             ctx.stroke(path, with: .color(glass), lineWidth: 1.3)
         }
 
+        // Concentric stress rings — but NOT perfect circles (that read as drawn-on
+        // rings, not shattered glass). Each ring is a jittered, occasionally-broken
+        // polygon: per-vertex radius wobble + a few gaps where the fracture didn't
+        // connect, so it looks like real stress cracking around the impact.
         for k in 0..<3 {
-            let rr = (16.0 + Double(k) * 26.0) * (0.8 + rng.unit() * 0.7)
-            let rect = CGRect(x: impact.x - rr, y: impact.y - rr, width: rr * 2, height: rr * 2)
-            ctx.stroke(Path(ellipseIn: rect), with: .color(glass.opacity(0.5)), lineWidth: 1.0)
+            let baseR = (15.0 + Double(k) * 25.0) * (0.8 + rng.unit() * 0.7)
+            let pts = 24 + Int(rng.unit() * 10)
+            var ring = Path()
+            var penDown = false
+            for j in 0...pts {
+                // Occasional gap: lift the pen so the ring is broken, not closed.
+                if rng.unit() < 0.10 { penDown = false; continue }
+                let ang = (Double(j) / Double(pts)) * 2 * .pi + (rng.unit() - 0.5) * 0.10
+                let rr = baseR * (1.0 + (rng.unit() - 0.5) * 0.30)   // ±15% wobble
+                let pt = CGPoint(x: impact.x + cos(ang) * rr, y: impact.y + sin(ang) * rr)
+                if penDown { ring.addLine(to: pt) } else { ring.move(to: pt); penDown = true }
+            }
+            ctx.stroke(ring, with: .color(dark), lineWidth: 1.8)
+            ctx.stroke(ring, with: .color(glass.opacity(0.55)), lineWidth: 0.8)
         }
+    }
+}
+
+/// A light blood splatter that appears when the marine takes damage and fades
+/// out over a few seconds. Fully procedural (Canvas): a small cluster of
+/// irregular dark-red blobs + scattered droplets biased to one screen edge, so
+/// it frames the readouts instead of covering them. Re-splats on each hit
+/// (`trigger` = hitCount). Deliberately restrained — "just enough", not a bath.
+struct BloodSplat: View {
+    var trigger: Int
+    @State private var seed: UInt64 = 0
+    @State private var opacity: Double = 0
+
+    var body: some View {
+        Canvas { ctx, size in
+            guard seed != 0 else { return }
+            Self.draw(&ctx, size, seed: seed)
+        }
+        .blur(radius: 1.1)               // soften the polygon edges → organic
+        .opacity(opacity)
+        .allowsHitTesting(false)
+        .onChange(of: trigger) { _, t in
+            guard t > 0 else { return }
+            seed = UInt64(bitPattern: Int64(t)) &* 0x9E3779B97F4A7C15 &+ 0x1234567
+            opacity = 0.5
+            withAnimation(.easeOut(duration: 3.0)) { opacity = 0 }   // fade over a few sec
+        }
+    }
+
+    private struct RNG {
+        var s: UInt64
+        init(_ seed: UInt64) { s = seed == 0 ? 0x9E3779B97F4A7C15 : seed }
+        mutating func unit() -> Double {
+            s = s &* 6364136223846793005 &+ 1442695040888963407
+            return Double(s >> 11) / Double(UInt64(1) << 53)
+        }
+    }
+
+    static func draw(_ ctx: inout GraphicsContext, _ size: CGSize, seed: UInt64) {
+        var rng = RNG(seed)
+        let blood = Color(red: 0.45, green: 0.02, blue: 0.02)
+        let dark  = Color(red: 0.24, green: 0.0,  blue: 0.0)
+        let unit = Double(min(size.width, size.height))
+
+        // Bias the splat to one edge/corner so it doesn't blot out the centre.
+        let left = rng.unit() < 0.5, top = rng.unit() < 0.5
+        let origin = CGPoint(
+            x: size.width  * (left ? 0.06 + 0.16 * rng.unit() : 0.78 + 0.16 * rng.unit()),
+            y: size.height * (top  ? 0.06 + 0.18 * rng.unit() : 0.76 + 0.18 * rng.unit()))
+
+        blob(&ctx, &rng, origin, unit * (0.085 + 0.05 * rng.unit()), blood)   // main smear
+        let drops = 7 + Int(rng.unit() * 7)                                   // + droplets
+        for _ in 0..<drops {
+            let ang = rng.unit() * 2 * .pi
+            let dist = unit * (0.04 + 0.22 * rng.unit())
+            let c = CGPoint(x: origin.x + cos(ang) * dist, y: origin.y + sin(ang) * dist)
+            blob(&ctx, &rng, c, unit * (0.006 + 0.022 * rng.unit()), rng.unit() < 0.5 ? blood : dark)
+        }
+    }
+
+    /// One irregular filled blob (a jittered-radius polygon).
+    private static func blob(_ ctx: inout GraphicsContext, _ rng: inout RNG,
+                             _ center: CGPoint, _ radius: Double, _ color: Color) {
+        let pts = 10 + Int(rng.unit() * 6)
+        var path = Path()
+        for j in 0...pts {
+            let ang = (Double(j) / Double(pts)) * 2 * .pi
+            let rr = radius * (0.55 + 0.7 * rng.unit())
+            let p = CGPoint(x: center.x + cos(ang) * rr, y: center.y + sin(ang) * rr)
+            if j == 0 { path.move(to: p) } else { path.addLine(to: p) }
+        }
+        path.closeSubpath()
+        ctx.fill(path, with: .color(color))
     }
 }
 
@@ -225,7 +313,6 @@ struct CrackOverlay: View {
 /// centred over the HUD at low opacity between pulses so the readouts stay legible.
 struct LowHealthSkull: View {
     var severity: Double
-    var size: CGFloat = 168
 
     var body: some View {
         if severity <= 0 {
@@ -236,17 +323,24 @@ struct LowHealthSkull: View {
             // Slow (~1.05 s) when just wounded → fast (~0.27 s) near death; below
             // 15% HP (s ≈ 0.57) it's already pulsing hard and quick.
             let period = 1.05 - 0.78 * s
-            TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { tl in
-                let t = tl.date.timeIntervalSinceReferenceDate
-                let phase = t.truncatingRemainder(dividingBy: period) / period
-                let pulse = 0.5 - 0.5 * cos(phase * 2 * .pi)   // 0→1→0
-                Image("skull")
-                    .renderingMode(.template).resizable().scaledToFit()
-                    .frame(width: size, height: size)
-                    .foregroundStyle(color)
-                    .shadow(color: color.opacity(0.85), radius: 14)
-                    .opacity((0.22 + 0.6 * s) * pulse + 0.06)
-                    .scaleEffect(1.0 + 0.14 * s * pulse)
+            // Fill the screen: ~88% of the width in portrait, capped by height in
+            // landscape so the square skull never overflows. Far larger than the
+            // old fixed 168 pt, in both orientations.
+            GeometryReader { geo in
+                let size = min(geo.size.width * 0.88, geo.size.height * 0.92)
+                TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { tl in
+                    let t = tl.date.timeIntervalSinceReferenceDate
+                    let phase = t.truncatingRemainder(dividingBy: period) / period
+                    let pulse = 0.5 - 0.5 * cos(phase * 2 * .pi)   // 0→1→0
+                    Image("skull")
+                        .renderingMode(.template).resizable().scaledToFit()
+                        .frame(width: size, height: size)
+                        .foregroundStyle(color)
+                        .shadow(color: color.opacity(0.85), radius: 14)
+                        .opacity((0.22 + 0.6 * s) * pulse + 0.06)
+                        .scaleEffect(1.0 + 0.14 * s * pulse)
+                        .frame(width: geo.size.width, height: geo.size.height)  // centre
+                }
             }
             .allowsHitTesting(false)
         }
@@ -258,18 +352,24 @@ struct LowHealthSkull: View {
 /// held CrackOverlay so a glance says "you're dead".
 struct DeadSkull: View {
     var dead: Bool
-    var size: CGFloat = 200
     var body: some View {
         if dead {
-            TimelineView(.animation(minimumInterval: 1.0 / 20.0)) { tl in
-                let t = tl.date.timeIntervalSinceReferenceDate
-                let pulse = 0.5 - 0.5 * cos(t * 2 * .pi / 1.5)   // slow breathing
-                Image("skull")
-                    .renderingMode(.template).resizable().scaledToFit()
-                    .frame(width: size, height: size)
-                    .foregroundStyle(Phosphor.danger)
-                    .shadow(color: Phosphor.danger.opacity(0.9), radius: 20)
-                    .opacity(0.62 + 0.32 * pulse)
+            // Fill the screen: ~92% of the width in portrait, capped by height in
+            // landscape so the square skull never overflows. Much larger than the
+            // old fixed 200 pt, in both orientations.
+            GeometryReader { geo in
+                let size = min(geo.size.width * 0.92, geo.size.height * 0.95)
+                TimelineView(.animation(minimumInterval: 1.0 / 20.0)) { tl in
+                    let t = tl.date.timeIntervalSinceReferenceDate
+                    let pulse = 0.5 - 0.5 * cos(t * 2 * .pi / 1.5)   // slow breathing
+                    Image("skull")
+                        .renderingMode(.template).resizable().scaledToFit()
+                        .frame(width: size, height: size)
+                        .foregroundStyle(Phosphor.danger)
+                        .shadow(color: Phosphor.danger.opacity(0.9), radius: 20)
+                        .opacity(0.62 + 0.32 * pulse)
+                        .frame(width: geo.size.width, height: geo.size.height)  // centre
+                }
             }
             .allowsHitTesting(false)
             .transition(.opacity)

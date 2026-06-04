@@ -31,8 +31,10 @@ private struct ConfigView: View {
     @EnvironmentObject private var relay: WatchRelay
     @EnvironmentObject private var game: GameState
     @Environment(\.openURL) private var openURL
-    @AppStorage(AppModel.phoneSoundKey) private var phoneSound = true
+    @AppStorage(AppModel.forcePhoneAudioKey) private var forcePhoneAudio = false
+    @AppStorage(WatchTransport.watchSoundKey) private var gameSounds = true
     @AppStorage(GameSounds.jumpKey) private var jumpSound = false
+    @AppStorage(WatchTransport.watchHapticsKey) private var watchHaptics = false
 
     @State private var phoneIP: String = NetworkInfo.wifiIPv4() ?? "—"
 
@@ -100,9 +102,22 @@ private struct ConfigView: View {
                 }
 
                 Section("Audio") {
-                    Toggle("Phone sounds (when watch is off)", isOn: $phoneSound)
+                    Toggle("Play audio on iPhone", isOn: $forcePhoneAudio)
+                        .onChange(of: forcePhoneAudio) { _, _ in model.audioRoutingChanged() }
+                    Toggle("Game sounds", isOn: $gameSounds)
+                        .onChange(of: gameSounds) { _, _ in model.audioRoutingChanged() }
                     Toggle("Jump grunt", isOn: $jumpSound)
-                    Text("The watch plays game sounds while it's in use; the phone takes over only when the watch isn't reachable. The jump grunt is off by default (it can be chatty); the Quake II help-computer \"objectives updated\" voice always plays.")
+                        .onChange(of: jumpSound) { _, _ in model.audioRoutingChanged() }
+                    Text(forcePhoneAudio
+                         ? "The iPhone plays the game sounds and the watch stays silent — handy for screen-recording a demo. Turn it off to hand audio back to the watch. Sound only ever plays on one device."
+                         : "The watch plays game sounds while it's connected; the iPhone takes over only when the watch isn't. Turn \u{201C}Play audio on iPhone\u{201D} on to force the sound out of the iPhone (e.g. for screen recording). Sound only ever plays on one device. \u{201C}Game sounds\u{201D} and \u{201C}Jump grunt\u{201D} apply wherever it's playing; the help-computer \u{201C}objectives updated\u{201D} voice always plays.")
+                        .font(.footnote).foregroundStyle(.secondary)
+                }
+
+                Section("Watch") {
+                    Toggle("Wrist haptics", isOn: $watchHaptics)
+                        .onChange(of: watchHaptics) { _, _ in model.audioRoutingChanged() }
+                    Text("These settings control the watch from here, to keep the wrist uncluttered. Volume is set on the watch itself. watchOS haptics carry a faint tone — for buzz with no sound, put the watch in Silent Mode.")
                         .font(.footnote).foregroundStyle(.secondary)
                 }
 
@@ -175,6 +190,9 @@ private struct DebugHUDView: View {
         .overlay(ScanlineOverlay().ignoresSafeArea())
         .crtGlitch(trigger: game.hitCount + reorient, severity: game.healthSeverity)
         // Death holds: shattered glass stays + a permanent red skull, until a new
+        // Light blood splatter on each hit, fading over a few seconds (under the
+        // death crack/skull layers).
+        .overlay(BloodSplat(trigger: game.hitCount).ignoresSafeArea())
         // game starts. Crack sits under the skulls.
         .overlay(CrackOverlay(seed: game.deathCount, visible: game.dead).ignoresSafeArea())
         // Persistent low-health alarm: pulses amber→red, slow→fast as HP falls.

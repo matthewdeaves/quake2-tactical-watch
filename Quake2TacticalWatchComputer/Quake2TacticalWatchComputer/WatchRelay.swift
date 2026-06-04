@@ -30,6 +30,11 @@ final class WatchRelay: NSObject, ObservableObject {
     private var latestInventory: [InventoryItem]?
     private var latestObjectives: Objectives?
 
+    /// Whether the PHONE currently owns audio (so the watch must stay silent).
+    /// Injected by AppModel from the "play audio on iPhone" toggle; rides every
+    /// real context push so the watch's mute state tracks the toggle.
+    var phoneOwnsAudio: () -> Bool = { false }
+
     /// When the watch last sent us ANYTHING (vitals-ack ping, heart rate, …).
     /// `isReachable` alone is unreliable: it drops to false whenever the watch
     /// dims to Always-On or the wrist falls — which happens constantly while the
@@ -135,6 +140,17 @@ final class WatchRelay: NSObject, ObservableObject {
             ctx[WatchTransport.objectivesKey] = d
         }
         guard !ctx.isEmpty else { return }
+        // Real state present — ride the current audio routing along so the watch
+        // mutes when the phone owns audio (and unmutes when it doesn't). Added
+        // AFTER the empty check so a routing flag alone never pushes (and never
+        // spuriously flips the watch "live" with no vitals).
+        ctx[WatchTransport.phoneOwnsAudioKey] = phoneOwnsAudio()
+        // Push the watch-side prefs now set on the iPhone (game sounds / jump /
+        // haptics) so the watch honours them; volume stays watch-local (not sent).
+        let prefs = UserDefaults.standard
+        ctx[WatchTransport.watchSoundKey] = prefs.object(forKey: WatchTransport.watchSoundKey) as? Bool ?? true
+        ctx[WatchTransport.watchJumpKey] = prefs.object(forKey: WatchTransport.watchJumpKey) as? Bool ?? false
+        ctx[WatchTransport.watchHapticsKey] = prefs.object(forKey: WatchTransport.watchHapticsKey) as? Bool ?? false
         do {
             try WCSession.default.updateApplicationContext(ctx)
             contextUpdates += 1
@@ -142,6 +158,11 @@ final class WatchRelay: NSObject, ObservableObject {
             // Non-fatal: the next heartbeat will try again.
         }
     }
+
+    /// Public trigger to re-push the latest context immediately — used when the
+    /// "play audio on iPhone" toggle flips so the watch mutes/unmutes at once
+    /// instead of waiting for the next vitals heartbeat.
+    func pushContextNow() { pushContext() }
 
     private func sendEvent(_ event: GameEvent) {
         guard WCSession.isSupported(), let d = WatchTransport.encode(event) else { return }

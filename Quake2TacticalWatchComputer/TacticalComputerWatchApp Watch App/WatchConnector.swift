@@ -47,6 +47,11 @@ final class WatchConnector: NSObject, ObservableObject {
     private let maxEvents = 40
     private var lastFlashes = 0
 
+    /// True when the PHONE owns audio (its "play audio on iPhone" toggle is on),
+    /// so the watch stays SILENT — sound only ever plays on one device. Haptics
+    /// still fire. Updated from the app context on every real push.
+    private var phoneOwnsAudio = false
+
     var isReceiving: Bool {
         guard let lastUpdate else { return false }
         return Date().timeIntervalSince(lastUpdate) < 3.0
@@ -100,6 +105,18 @@ final class WatchConnector: NSObject, ObservableObject {
         // missed the moment they changed — no longer dropped with the event stream.
         if let o = WatchTransport.decode(Objectives.self, from: context[WatchTransport.objectivesKey]) {
             objectives = o
+        }
+        // The phone tells us when IT owns audio (its "play audio on iPhone"
+        // toggle) so the watch stays silent — sound only ever plays on one device.
+        if let pa = context[WatchTransport.phoneOwnsAudioKey] as? Bool {
+            phoneOwnsAudio = pa
+        }
+        // Watch prefs (game sounds / jump SFX / haptics) are now set on the iPhone
+        // and pushed here; persist each into THIS device's UserDefaults so
+        // GameSounds/Haptics read them exactly as before. Volume stays watch-local.
+        let defaults = UserDefaults.standard
+        for key in [WatchTransport.watchSoundKey, WatchTransport.watchJumpKey, WatchTransport.watchHapticsKey] {
+            if let b = context[key] as? Bool { defaults.set(b, forKey: key) }
         }
         lastUpdate = Date()
         markLive()
@@ -183,7 +200,7 @@ final class WatchConnector: NSObject, ObservableObject {
         if let p = prev {
             if p.hp > 0 && v.hp <= 0 && v.spec == 0 {
                 Haptics.death()
-                GameSounds.shared.play("glass_break")   // screen-crack SFX
+                if !phoneOwnsAudio { GameSounds.shared.play("glass_break") }   // screen-crack SFX
                 deathCount += 1
                 dead = true
             } else if v.hp > 0 && v.hp <= 10 && p.hp > 10 {
@@ -215,7 +232,9 @@ final class WatchConnector: NSObject, ObservableObject {
     private func ingestEvent(_ e: GameEvent) {
         // Player sounds: play the exact Quake II effect the engine reported.
         if e.kind == "psound" {
-            if let name = e.msg, !name.isEmpty {
+            // Silent when the phone owns audio (its "play audio on iPhone"
+            // toggle) — sound only ever plays on one device.
+            if let name = e.msg, !name.isEmpty, !phoneOwnsAudio {
                 GameSounds.shared.play(name, isQuake1: vitals?.isQuake1 ?? false)
             }
             return

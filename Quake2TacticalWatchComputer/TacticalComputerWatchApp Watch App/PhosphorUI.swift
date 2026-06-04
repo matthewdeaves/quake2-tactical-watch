@@ -337,12 +337,94 @@ struct CrackOverlay: View {
             ctx.stroke(path, with: .color(glass), lineWidth: 1.0)
         }
 
-        // concentric fracture rings around the impact
+        // Concentric stress rings — jittered, occasionally-broken polygons (not
+        // perfect circles, which read as drawn-on rings rather than shattered glass).
         for k in 0..<2 {
-            let rr = (10.0 + Double(k) * 16.0) * (0.8 + rng.unit() * 0.7)
-            let rect = CGRect(x: impact.x - rr, y: impact.y - rr, width: rr * 2, height: rr * 2)
-            ctx.stroke(Path(ellipseIn: rect), with: .color(glass.opacity(0.55)), lineWidth: 0.8)
+            let baseR = (10.0 + Double(k) * 16.0) * (0.8 + rng.unit() * 0.7)
+            let pts = 18 + Int(rng.unit() * 8)
+            var ring = Path()
+            var penDown = false
+            for j in 0...pts {
+                if rng.unit() < 0.10 { penDown = false; continue }   // gap
+                let ang = (Double(j) / Double(pts)) * 2 * .pi + (rng.unit() - 0.5) * 0.10
+                let rr = baseR * (1.0 + (rng.unit() - 0.5) * 0.30)   // ±15% wobble
+                let pt = CGPoint(x: impact.x + cos(ang) * rr, y: impact.y + sin(ang) * rr)
+                if penDown { ring.addLine(to: pt) } else { ring.move(to: pt); penDown = true }
+            }
+            ctx.stroke(ring, with: .color(dark), lineWidth: 1.2)
+            ctx.stroke(ring, with: .color(glass.opacity(0.55)), lineWidth: 0.7)
         }
+    }
+}
+
+/// A light blood splatter that appears when the marine takes damage and fades
+/// out over a few seconds. Fully procedural (Canvas): a small cluster of
+/// irregular dark-red blobs + scattered droplets biased to one screen edge, so
+/// it frames the readouts instead of covering them. Re-splats on each hit
+/// (`trigger` = hitCount). Deliberately restrained — "just enough", not a bath.
+struct BloodSplat: View {
+    var trigger: Int
+    @State private var seed: UInt64 = 0
+    @State private var opacity: Double = 0
+
+    var body: some View {
+        Canvas { ctx, size in
+            guard seed != 0 else { return }
+            Self.draw(&ctx, size, seed: seed)
+        }
+        .blur(radius: 0.9)
+        .opacity(opacity)
+        .allowsHitTesting(false)
+        .onChange(of: trigger) { _, t in
+            guard t > 0 else { return }
+            seed = UInt64(bitPattern: Int64(t)) &* 0x9E3779B97F4A7C15 &+ 0x1234567
+            opacity = 0.5
+            withAnimation(.easeOut(duration: 3.0)) { opacity = 0 }
+        }
+    }
+
+    private struct RNG {
+        var s: UInt64
+        init(_ seed: UInt64) { s = seed == 0 ? 0x9E3779B97F4A7C15 : seed }
+        mutating func unit() -> Double {
+            s = s &* 6364136223846793005 &+ 1442695040888963407
+            return Double(s >> 11) / Double(UInt64(1) << 53)
+        }
+    }
+
+    static func draw(_ ctx: inout GraphicsContext, _ size: CGSize, seed: UInt64) {
+        var rng = RNG(seed)
+        let blood = Color(red: 0.45, green: 0.02, blue: 0.02)
+        let dark  = Color(red: 0.24, green: 0.0,  blue: 0.0)
+        let unit = Double(min(size.width, size.height))
+
+        let left = rng.unit() < 0.5, top = rng.unit() < 0.5
+        let origin = CGPoint(
+            x: size.width  * (left ? 0.06 + 0.16 * rng.unit() : 0.78 + 0.16 * rng.unit()),
+            y: size.height * (top  ? 0.06 + 0.18 * rng.unit() : 0.76 + 0.18 * rng.unit()))
+
+        blob(&ctx, &rng, origin, unit * (0.09 + 0.05 * rng.unit()), blood)
+        let drops = 6 + Int(rng.unit() * 6)
+        for _ in 0..<drops {
+            let ang = rng.unit() * 2 * .pi
+            let dist = unit * (0.05 + 0.24 * rng.unit())
+            let c = CGPoint(x: origin.x + cos(ang) * dist, y: origin.y + sin(ang) * dist)
+            blob(&ctx, &rng, c, unit * (0.008 + 0.026 * rng.unit()), rng.unit() < 0.5 ? blood : dark)
+        }
+    }
+
+    private static func blob(_ ctx: inout GraphicsContext, _ rng: inout RNG,
+                             _ center: CGPoint, _ radius: Double, _ color: Color) {
+        let pts = 10 + Int(rng.unit() * 6)
+        var path = Path()
+        for j in 0...pts {
+            let ang = (Double(j) / Double(pts)) * 2 * .pi
+            let rr = radius * (0.55 + 0.7 * rng.unit())
+            let p = CGPoint(x: center.x + cos(ang) * rr, y: center.y + sin(ang) * rr)
+            if j == 0 { path.move(to: p) } else { path.addLine(to: p) }
+        }
+        path.closeSubpath()
+        ctx.fill(path, with: .color(color))
     }
 }
 

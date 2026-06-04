@@ -41,18 +41,33 @@ final class AppModel: ObservableObject {
             self.relay.forward(message)
         }
 
-        // The phone plays game sounds only as a FALLBACK: when the watch isn't in
-        // use (not on the wrist / app not running) and phone audio is enabled
-        // (default on). `watchInUse` survives Always-On dimming, so we don't
-        // double-play while the player's wrist is down. The watch owns audio.
+        // Where do game sounds play? Sound only ever comes out of ONE device.
+        //   • "Play audio on iPhone" OFF (default): the watch owns audio while
+        //     it's in use; the phone plays only as a FALLBACK when the watch
+        //     isn't in use (not on the wrist / app not running). `watchInUse`
+        //     survives Always-On dimming, so we don't double-play wrist-down.
+        //   • "Play audio on iPhone" ON: the phone ALWAYS plays (handy for
+        //     screen-recording a demo so the recording captures the sound), and
+        //     the watch is told to stay silent (phoneOwnsAudioKey in the context).
         gameState.audioAllowed = { [weak self] in
             guard let self else { return false }
-            let phoneOn = UserDefaults.standard.object(forKey: Self.phoneSoundKey) as? Bool ?? true
-            return phoneOn && !self.relay.watchInUse
+            if Self.forcePhoneAudio { return true }   // forced: phone always plays
+            return !self.relay.watchInUse             // default: phone is the fallback
         }
+        // Keep the watch's mute state in lockstep with the toggle.
+        relay.phoneOwnsAudio = { Self.forcePhoneAudio }
     }
 
-    static let phoneSoundKey = "q2.phoneSound"
+    /// "Play audio on iPhone" — when true the phone owns audio and the watch is
+    /// muted; when false (default) the watch owns it and the phone is fallback.
+    static let forcePhoneAudioKey = "q2.forcePhoneAudio"
+    static var forcePhoneAudio: Bool {
+        UserDefaults.standard.object(forKey: forcePhoneAudioKey) as? Bool ?? false
+    }
+
+    /// Re-push the audio routing to the watch immediately when the toggle flips,
+    /// so the watch mutes/unmutes without waiting for the next vitals heartbeat.
+    func audioRoutingChanged() { relay.pushContextNow() }
 
     private var relayActivated = false
 

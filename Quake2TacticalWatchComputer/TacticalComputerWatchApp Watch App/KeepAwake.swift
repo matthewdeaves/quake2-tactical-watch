@@ -147,17 +147,28 @@ extension WorkoutKeepAlive: HKWorkoutSessionDelegate {
     }
 
     // A pause/resume from the SYSTEM controls (the watchOS Smart Stack live-workout
-    // widget, Control Center, side-button) is delivered as a workout EVENT, which
-    // doesn't always come through `didChangeTo`. Handle it here so the wrist pill's
-    // pause/resume actually drives our session + UI. Apple recommends catching
-    // both the state change AND the event.
+    // pill, Control Center, side-button) is delivered as a workout EVENT, which for
+    // an `.other` session doesn't reliably come through `didChangeTo` — and the pill
+    // can deliver the pause EVENT WITHOUT actually transitioning the session, so the
+    // builder keeps accruing and the timer keeps running ("the pause button does
+    // nothing"). So here we don't just mirror the phase — we ENFORCE the matching
+    // session state ourselves when it hasn't transitioned, which truly stops/starts
+    // the builder. Calling pause()/resume() re-emits the same event, but the state
+    // guard makes that a one-shot (no loop), and it's a no-op when the system DID
+    // transition the session. Apple's guidance: act on both the state change and
+    // the event; this makes the pill authoritative for our custom session.
     nonisolated func workoutSession(_ workoutSession: HKWorkoutSession,
                                     didGenerate event: HKWorkoutEvent) {
         Task { @MainActor in
             switch event.type {
-            case .pause:  self.phase = .paused
-            case .resume: self.phase = .running
-            default:      break
+            case .pause:
+                self.phase = .paused
+                if workoutSession.state == .running { workoutSession.pause() }
+            case .resume:
+                self.phase = .running
+                if workoutSession.state == .paused { workoutSession.resume() }
+            default:
+                break
             }
         }
     }

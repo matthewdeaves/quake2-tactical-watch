@@ -35,6 +35,10 @@ final class GameSounds {
 
     private var jumpEnabled: Bool { UserDefaults.standard.object(forKey: Self.jumpKey) as? Bool ?? false }
 
+    /// Unified "Game sounds" master (shared key with the watch, set in iPhone
+    /// Setup). Off ⇒ no game sounds on EITHER device (haptics still fire).
+    private var soundEnabled: Bool { UserDefaults.standard.object(forKey: "q2.sound") as? Bool ?? true }
+
     /// Play the sound for a game basename, with category fallback. Only the *jump
     /// grunt is individually mutable; the help-computer "objectives updated" voice
     /// (pc_up) always plays when the game triggers it — it's in-fiction important.
@@ -42,7 +46,7 @@ final class GameSounds {
     /// clip set: Quake 1 sounds are bundled q1_-prefixed so they never collide
     /// with the Quake II set (both ship a "damage"/"death1" of different vintage).
     func play(_ name: String, isQuake1: Bool = false) {
-        guard volume > 0 else { return }
+        guard soundEnabled, volume > 0 else { return }
         let n = name.lowercased()
         // The chatty jump grunt is opt-in (Q2 "*jump…", Q1 "plyrjmp8").
         if (n.hasPrefix("jump") || n.hasPrefix("plyrjmp")) && !jumpEnabled { return }
