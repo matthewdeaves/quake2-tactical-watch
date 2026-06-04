@@ -150,7 +150,7 @@ private struct DebugHUDView: View {
     /// Best available level name: the F1 location if we have it, else the map.
     private var sector: String {
         if let loc = game.objectives?.loc, !loc.isEmpty { return loc }
-        return game.meta?.level ?? (game.live ? "STANDBY" : "OFFLINE")
+        return game.meta?.level ?? (game.live ? "STANDBY" : "—")
     }
 
     var body: some View {

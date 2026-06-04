@@ -475,9 +475,11 @@ struct TerminalHeader: View {
             Circle().fill(live ? Phosphor.green : Phosphor.danger)
                 .frame(width: 7, height: 7)
                 .phosphorGlow(live ? Phosphor.green : Phosphor.danger, radius: 6, intensity: 0.9)
-            Text(live ? "LINK" : "NO SIG")
+            Text(live ? "ONLINE" : "OFFLINE")
                 .font(.system(.caption2, design: .monospaced).weight(.bold))
-                .foregroundStyle(live ? Phosphor.green : Phosphor.amberDim)
+                .tracking(1)
+                .foregroundStyle(live ? Phosphor.green : Phosphor.danger)
+                .phosphorGlow(live ? Phosphor.green : Phosphor.danger, radius: 4, intensity: 0.8)
         }
         .padding(.horizontal, 12).padding(.vertical, 7)
         .background(Phosphor.amber.opacity(0.05))
