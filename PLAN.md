@@ -187,9 +187,11 @@ ships a sibling `Quake/cl_watchlink.c` emitting the *same* `vitals` / `meta` /
 so a single companion drives both games and the app needs no notion of which is
 on the other end. Quake 1 differences are all "fields it doesn't have": there is
 **no `objectives` event** (Quake 1 has no F1 help computer — the HUD drops the
-mission panel and shows sector + vitals); `flashes`/`layouts`/`spec` are always
-`0` (Quake 1 lacks those stats — damage instead rides the discrete `damage` event
-fired from `svc_damage`); `sel` is the active-weapon name mapped from
+mission panel and shows sector + vitals); `layouts`/`spec` are always `0` (Quake 1
+lacks those stats), while `flashes` mirrors the latest `svc_damage` (bit0 blood,
+bit1 armor) so the wrist buzz/flash rides the reliable vitals heartbeat as well as
+the discrete `damage` event (and so armor-only hits register) — it clears the
+moment a heartbeat carries it; `sel` is the active-weapon name mapped from
 `STAT_ACTIVEWEAPON`; `pu.icon` is `quad`/`pent`/`ring`/`envir` with `sec`
 estimated from `cl.item_gettime` vs Quake's 30 s powerup duration; and
 `meta.items` is the owned-weapon list (Quake 1 has no item-name configstring
