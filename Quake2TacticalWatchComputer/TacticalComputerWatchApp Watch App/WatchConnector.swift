@@ -190,6 +190,15 @@ final class WatchConnector: NSObject, ObservableObject {
             if p.hp > 0 && v.hp > p.hp { Haptics.pickup() }   // health pickup
             if v.frags > p.frags { Haptics.frag() }
             if v.pu.isActive && !p.pu.isActive { Haptics.powerup() }
+
+            // Quake 1 sends no STAT_FLASHES bitfield, so the wrist buzz rides
+            // ONLY the discrete `damage` event — and the relay DROPS events when
+            // the watch is momentarily unreachable (by design, to avoid a backlog
+            // replay). Vitals ride the latest-wins app context that always lands,
+            // so derive the hit from any HP drop as a reliable fallback. Debounced
+            // inside triggerDamage, so it never double-fires with the Q2 flashes
+            // edge above. (Q2 already has the flashes fallback, so Q1-only.)
+            if v.isQuake1 && v.hp > 0 && v.hp < p.hp { triggerDamage() }
         }
 
         // A new game / respawn (HP back above 0) clears the death overlays.
