@@ -60,6 +60,9 @@ nonisolated struct Vitals: Codable, Equatable, Sendable {
             if i.contains("envir") { return "ENVIRO-SUIT" }
             if i.contains("rebreather") || i.contains("breath") { return "REBREATHER" }
             if i.contains("silencer") { return "SILENCER" }
+            // Quake-1 Ring of Shadows. Checked before "ir" below — "ring"
+            // contains that substring — and kept game-neutral on purpose.
+            if i.contains("ring") || i.contains("invis") { return "INVISIBILITY" }
             if i.contains("ir") || i.contains("goggles") { return "IR GOGGLES" }
             return icon.uppercased()
         }

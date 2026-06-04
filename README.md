@@ -19,6 +19,15 @@ a cvar-gated feed in `src/client/cl_watchlink.c`, off by default (`watch_host ""
 The wire format is newline-delimited JSON over UDP port 27999 — JSON specifically
 so the big-endian PowerPC Macs stay byte-order-proof.
 
+**It also drives Quake 1.** The same companion talks to
+**[old-mac-quakespasm](https://github.com/matthewdeaves/old-mac-quakespasm)**
+(branch [`watch-tactical-computer`](https://github.com/matthewdeaves/old-mac-quakespasm/tree/watch-tactical-computer)),
+which ships the sibling feed in `Quake/cl_watchlink.c` — identical wire format,
+port and Bonjour service (`_q2watch._udp`). Quake 1 has no in-game help computer,
+so the HUD gracefully drops the objectives panel and shows sector + vitals; the
+app doesn't need to know or care which game is on the other end. Engine details:
+[old-mac-quakespasm `docs/WATCHLINK.md`](https://github.com/matthewdeaves/old-mac-quakespasm/blob/watch-tactical-computer/docs/WATCHLINK.md).
+
 ## Screens
 
 | | |
@@ -39,7 +48,8 @@ so the big-endian PowerPC Macs stay byte-order-proof.
 ## Status
 
 - ✅ **Engine feed** — shipped in
-  [old-mac-quake2](https://github.com/matthewdeaves/old-mac-quake2).
+  [old-mac-quake2](https://github.com/matthewdeaves/old-mac-quake2) (Quake II) and
+  [old-mac-quakespasm](https://github.com/matthewdeaves/old-mac-quakespasm) (Quake 1).
 - ✅ **iPhone relay** — UDP listener → `GameState` → WatchConnectivity bridge.
 - ✅ **watchOS app** — Vitals / Inventory / Mission views, damage haptics,
   curated event sounds, live heart-rate, keep-awake workout session.

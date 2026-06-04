@@ -180,6 +180,23 @@ amount). `meta.items` is the **map's full CS_ITEMS name table**, not a per-playe
 owned-inventory snapshot — owned quantities are not yet on the wire (see §6).
 The Swift side mirrors these exactly in `WireProtocol.swift` (iOS + watch copies).
 
+**Quake 1 reuses this format unchanged.** The
+[old-mac-quakespasm](https://github.com/matthewdeaves/old-mac-quakespasm) port
+ships a sibling `Quake/cl_watchlink.c` emitting the *same* `vitals` / `meta` /
+`event` lines on the *same* port (27999) and Bonjour service (`_q2watch._udp`),
+so a single companion drives both games and the app needs no notion of which is
+on the other end. Quake 1 differences are all "fields it doesn't have": there is
+**no `objectives` event** (Quake 1 has no F1 help computer — the HUD drops the
+mission panel and shows sector + vitals); `flashes`/`layouts`/`spec` are always
+`0` (Quake 1 lacks those stats — damage instead rides the discrete `damage` event
+fired from `svc_damage`); `sel` is the active-weapon name mapped from
+`STAT_ACTIVEWEAPON`; `pu.icon` is `quad`/`pent`/`ring`/`envir` with `sec`
+estimated from `cl.item_gettime` vs Quake's 30 s powerup duration; and
+`meta.items` is the owned-weapon list (Quake 1 has no item-name configstring
+table). The one app-side change this required was a neutral `INVISIBILITY` label
+for the Ring of Shadows in `WireProtocol.swift`. See
+[old-mac-quakespasm `docs/WATCHLINK.md`](https://github.com/matthewdeaves/old-mac-quakespasm/blob/watch-tactical-computer/docs/WATCHLINK.md).
+
 ---
 
 ## 3. The engine patch (`src/client/cl_watchlink.c`)
