@@ -123,9 +123,14 @@ final class WatchRelay: NSObject, ObservableObject {
     private func pushContext() {
         guard WCSession.isSupported() else { return }
         let s = WCSession.default
-        // Don't push (and silently throw ~10×/s) until the watch app is a
-        // reachable companion.
-        guard s.activationState == .activated, s.isWatchAppInstalled else { return }
+        // Only require an ACTIVATED session. We deliberately DON'T gate on
+        // isWatchAppInstalled: after a dev/sideload install (Xcode/devicectl) that
+        // companion flag can read false even though the watch app IS installed and
+        // running, which would silently block the ENTIRE vitals feed and leave the
+        // watch stuck on STANDBY. updateApplicationContext is safe to call whenever
+        // the session is activated — it just stores the latest snapshot for the
+        // watch to pick up, and the catch below swallows the rare not-activated throw.
+        guard s.activationState == .activated else { return }
         var ctx: [String: Any] = [:]
         if let v = latestVitals, let d = WatchTransport.encode(v) {
             ctx[WatchTransport.vitalsKey] = d
@@ -167,7 +172,9 @@ final class WatchRelay: NSObject, ObservableObject {
     private func sendEvent(_ event: GameEvent) {
         guard WCSession.isSupported(), let d = WatchTransport.encode(event) else { return }
         let session = WCSession.default
-        guard session.activationState == .activated, session.isWatchAppInstalled else { return }
+        // As with pushContext, don't gate on isWatchAppInstalled (unreliable after
+        // a sideload install); reachability is the real gate for live messages.
+        guard session.activationState == .activated else { return }
         // Events (sounds, damage, story, objectives) are REAL-TIME. If the watch
         // isn't reachable this instant, DROP them — never queue via
         // transferUserInfo: that guarantees delivery, so a whole iPhone-only
@@ -206,11 +213,21 @@ extension WatchRelay: WCSessionDelegate {
     }
 
     nonisolated func sessionWatchStateDidChange(_ session: WCSession) {
-        Task { @MainActor in self.refreshState(session) }
+        Task { @MainActor in
+            self.refreshState(session)
+            // The companion (re)appeared / installed / became active — hand it the
+            // freshest snapshot right now instead of waiting for the next packet.
+            self.pushContext()
+        }
     }
 
     nonisolated func sessionReachabilityDidChange(_ session: WCSession) {
-        Task { @MainActor in self.refreshState(session) }
+        Task { @MainActor in
+            self.refreshState(session)
+            // Watch just came within reach — push current state immediately so it
+            // lights up at once rather than after the next ~1 s vitals heartbeat.
+            self.pushContext()
+        }
     }
 
     // The watch reports its build version + alive-pings via transferUserInfo.

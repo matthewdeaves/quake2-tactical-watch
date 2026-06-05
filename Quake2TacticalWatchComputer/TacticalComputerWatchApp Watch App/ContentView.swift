@@ -589,22 +589,13 @@ struct SettingsView: View {
                         }
                         .font(.system(.body, design: .monospaced))
                         VolumeBars(level: volume)
-                        Text("Game sounds, jump SFX and haptics are set in the iPhone app (Setup).")
-                            .font(.system(.caption2, design: .monospaced))
-                            .foregroundStyle(Phosphor.amberDim)
-                            .padding(.top, 2)
                     }
                 }
 
                 TerminalPanel(title: "SYSTEM") {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("TACTICAL COMPUTER")
-                            .font(.system(.caption2, design: .monospaced))
-                            .foregroundStyle(Phosphor.amberDim)
-                        Text(AppVersion.string)
-                            .font(.system(.caption2, design: .monospaced))
-                            .foregroundStyle(Phosphor.amberDim.opacity(0.7))
-                    }
+                    Text(AppVersion.string)
+                        .font(.system(.caption, design: .monospaced))
+                        .foregroundStyle(Phosphor.amberDim)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .top)
