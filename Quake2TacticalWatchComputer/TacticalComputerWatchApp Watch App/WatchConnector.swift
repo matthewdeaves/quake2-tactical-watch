@@ -75,6 +75,13 @@ final class WatchConnector: NSObject, ObservableObject {
     /// `game` is treated as the full Quake II HUD.
     var isQuake1: Bool { vitals?.isQuake1 ?? false }
 
+    /// Quake 3 Arena feed — also cut-down (like Quake 1).
+    var isQuake3: Bool { vitals?.isQuake3 ?? false }
+
+    /// True only for Quake II (inventory + F1 objectives computer). Quake 1 and
+    /// Quake 3 show the cut-down HUD: no STATUS page, sector folded into COMMS.
+    var hasComputer: Bool { vitals?.hasComputer ?? true }
+
     func activate() {
         guard WCSession.isSupported() else { return }
         let s = WCSession.default
@@ -235,7 +242,7 @@ final class WatchConnector: NSObject, ObservableObject {
             // Silent when the phone owns audio (its "play audio on iPhone"
             // toggle) — sound only ever plays on one device.
             if let name = e.msg, !name.isEmpty, !phoneOwnsAudio {
-                GameSounds.shared.play(name, isQuake1: vitals?.isQuake1 ?? false)
+                GameSounds.shared.play(name, game: vitals?.game)
             }
             return
         }

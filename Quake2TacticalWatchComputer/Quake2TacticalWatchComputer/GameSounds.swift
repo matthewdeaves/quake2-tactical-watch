@@ -42,15 +42,16 @@ final class GameSounds {
     /// Play the sound for a game basename, with category fallback. Only the *jump
     /// grunt is individually mutable; the help-computer "objectives updated" voice
     /// (pc_up) always plays when the game triggers it — it's in-fiction important.
-    /// Play the effect for a game basename. `isQuake1` selects the game-correct
-    /// clip set: Quake 1 sounds are bundled q1_-prefixed so they never collide
-    /// with the Quake II set (both ship a "damage"/"death1" of different vintage).
-    func play(_ name: String, isQuake1: Bool = false) {
+    /// Play the effect for a game basename. `game` ("q1"/"q3"/else Q2) selects
+    /// the game-correct clip set: Quake 1 and Quake 3 sounds are bundled q1_- /
+    /// q3_-prefixed so they never collide with the Quake II set (each ships a
+    /// "pain"/"death" of different vintage).
+    func play(_ name: String, game: String? = nil) {
         guard soundEnabled, volume > 0 else { return }
         let n = name.lowercased()
-        // The chatty jump grunt is opt-in (Q2 "*jump…", Q1 "plyrjmp8").
+        // The chatty jump grunt is opt-in (Q2 "*jump…", Q1 "plyrjmp8", Q3 "jump").
         if (n.hasPrefix("jump") || n.hasPrefix("plyrjmp")) && !jumpEnabled { return }
-        guard let p = player(for: resolve(n, isQuake1: isQuake1)) else { return }
+        guard let p = player(for: resolve(n, game: game)) else { return }
         p.volume = volume
         p.currentTime = 0
         p.play()
@@ -60,8 +61,22 @@ final class GameSounds {
         Bundle.main.url(forResource: file, withExtension: "wav") != nil
     }
 
-    private func resolve(_ name: String, isQuake1: Bool) -> String {
-        if isQuake1 {
+    private func resolve(_ name: String, game: String?) -> String {
+        if game == "q3" {
+            let q = "q3_" + name
+            if has(q) { return q }
+            // Category fallbacks (all q3_-prefixed) for anything not bundled.
+            if name.hasPrefix("pain") { return "q3_pain" }
+            if name.hasPrefix("death") || name == "gib" { return "q3_death" }
+            if name.hasPrefix("drown") || name.hasPrefix("gasp") { return "q3_drown" }
+            if name.hasPrefix("jump") { return "q3_jump" }
+            if name.contains("powerup") || name.contains("quad") || name.hasPrefix("damage") { return "q3_powerup" }
+            if name.hasPrefix("w") && name.contains("pkup") { return "q3_wpkup" }
+            if name.contains("pkup") || name.contains("health") || name.contains("armor") || name.contains("item") { return "q3_pkup" }
+            if has(name) { return name }     // app SFX (e.g. glass_break)
+            return "q3_pkup"
+        }
+        if game == "q1" {
             let q = "q1_" + name
             if has(q) { return q }
             // Category fallbacks (all q1_-prefixed) for anything not bundled.

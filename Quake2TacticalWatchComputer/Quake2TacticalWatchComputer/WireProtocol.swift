@@ -30,9 +30,10 @@ import Foundation
 
 /// The live status-bar heartbeat (~`watch_rate` Hz, default 10).
 nonisolated struct Vitals: Codable, Equatable, Sendable {
-    /// Which engine is feeding us — "q2" or "q1" — so the HUD can adapt itself
-    /// (Quake 1 has no inventory or objectives computer). Optional so older
-    /// engine builds that omit it still decode.
+    /// Which engine is feeding us — "q2", "q1" or "q3" — so the HUD can adapt
+    /// itself (only Quake II has an inventory + F1 objectives computer; Quake 1
+    /// and Quake 3 are cut-down). Optional so older engine builds that omit it
+    /// still decode (treated as the full Quake II HUD).
     var game: String?
     var hp: Int
     var armor: Int
@@ -68,6 +69,10 @@ nonisolated struct Vitals: Codable, Equatable, Sendable {
             // contains that substring — and kept game-neutral on purpose.
             if i.contains("ring") || i.contains("invis") { return "INVISIBILITY" }
             if i.contains("ir") || i.contains("goggles") { return "IR GOGGLES" }
+            // Quake 3 powerups.
+            if i.contains("regen") { return "REGENERATION" }
+            if i.contains("haste") { return "HASTE" }
+            if i.contains("flight") { return "FLIGHT" }
             return icon.uppercased()
         }
     }
@@ -75,9 +80,17 @@ nonisolated struct Vitals: Codable, Equatable, Sendable {
     /// True on the frame the marine was hit (any subsystem flashed).
     var isHit: Bool { flashes != 0 }
 
-    /// True when this is the Quake 1 feed — the cut-down HUD (no inventory /
-    /// objectives). Unknown/absent `game` is treated as the full Quake II HUD.
+    /// True when this is the Quake 1 feed.
     var isQuake1: Bool { game == "q1" }
+
+    /// True when this is the Quake 3 Arena feed — like Quake 1, a cut-down HUD
+    /// (no inventory / F1 objectives), but score (frags) is front-and-centre.
+    var isQuake3: Bool { game == "q3" }
+
+    /// True only when the feed carries the inventory + F1 objectives computer —
+    /// i.e. Quake II. Quake 1 and Quake 3 are run-and-gun / arena and show the
+    /// cut-down HUD. Unknown/absent `game` is treated as the full Quake II HUD.
+    var hasComputer: Bool { !isQuake1 && !isQuake3 }
 }
 
 /// Sent once per map load: the level name and the item-name lookup table.

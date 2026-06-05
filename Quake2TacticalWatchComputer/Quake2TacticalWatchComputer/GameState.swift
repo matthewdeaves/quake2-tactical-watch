@@ -90,7 +90,7 @@ final class GameState: ObservableObject {
             // as a fallback when the watch isn't in use; see audioAllowed).
             if e.kind == "psound" {
                 if let name = e.msg, !name.isEmpty, audioAllowed() {
-                    GameSounds.shared.play(name, isQuake1: vitals?.isQuake1 ?? false)
+                    GameSounds.shared.play(name, game: vitals?.game)
                 }
                 return
             }

@@ -42,7 +42,7 @@ private struct ConfigView: View {
         NavigationStack {
             Form {
                 Section("Connection") {
-                    Text("Auto-discovers your Quake II machine on the LAN — just play. (This phone: \(phoneIP):\(String(model.port)))")
+                    Text("Auto-discovers your Quake machine (Quake 1 / 2 / 3) on the LAN — just play. (This phone: \(phoneIP):\(String(model.port)))")
                         .font(.footnote).foregroundStyle(.secondary)
                 }
 
@@ -497,7 +497,7 @@ private struct DebugHUDView: View {
                 CursorBlock(color: accent, height: 30)
             }
             Text(lost ? "uplink dropped — is the game still running?"
-                      : "start playing on the Quake II machine to establish the link.")
+                      : "start playing on the Quake machine to establish the link.")
                 .font(.system(.footnote, design: .monospaced))
                 .foregroundStyle(Phosphor.amberDim)
         }

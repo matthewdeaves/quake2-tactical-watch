@@ -17,9 +17,9 @@ struct ContentView: View {
         TabView {
             VitalsView()
             // STATUS carries the objectives computer + pack — Quake II only.
-            // On Quake 1 it would be just the sector name, so we drop the page
-            // entirely (the sector folds into COMMS) — no sparse screens.
-            if !conn.isQuake1 { StatusView() }
+            // On Quake 1 / Quake 3 it would be just the sector name, so we drop
+            // the page entirely (the sector folds into COMMS) — no sparse screens.
+            if conn.hasComputer { StatusView() }
             CommsView()
             WorkoutControlView()
             SettingsView()
@@ -404,9 +404,9 @@ struct CommsView: View {
                 // Fitted to one screen: newest on top, capped to what fits, so the
                 // page indicator stays the normal size (no internal scroll).
                 VStack(alignment: .leading, spacing: 8) {
-                // Quake 1 has no STATUS page — surface the sector here so the
-                // level name is never lost.
-                if conn.isQuake1 {
+                // Quake 1 / Quake 3 have no STATUS page — surface the sector
+                // here so the level name is never lost.
+                if !conn.hasComputer {
                     TerminalPanel(title: "SECTOR", tint: Phosphor.green) {
                         Text(conn.sector.uppercased())
                             .font(.system(.headline, design: .monospaced))
