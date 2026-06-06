@@ -170,10 +170,12 @@ private struct DebugHUDView: View {
 
     var body: some View {
         GeometryReader { geo in
-            // Landscape when the live page is wider than it is tall — works on
-            // every iPhone (compact-width landscape included).
+            // Landscape when the page is wider than it is tall.
             let landscape = geo.size.width > geo.size.height
             ZStack {
+                // Glass bleeds to every edge (incl. behind the Dynamic Island /
+                // home indicator); the readouts stay in the safe area so no text
+                // slips under the bars.
                 TerminalBackground()
                 VStack(spacing: 0) {
                     TerminalHeader(sector: sector, live: game.live)
@@ -185,21 +187,25 @@ private struct DebugHUDView: View {
             }
             .onChange(of: landscape) { _, _ in reorient += 1 }
         }
-        // CRT lives on-screen (TimelineView pauses in background). A reorient also
-        // kicks the horizontal-tear glitch, so the switch reads as a real re-sync.
-        .overlay(ScanlineOverlay().ignoresSafeArea())
+        // A reorient kicks the horizontal-tear glitch, so the switch reads as a
+        // real re-sync.
         .crtGlitch(trigger: game.hitCount + reorient, severity: game.healthSeverity)
-        // Death holds: shattered glass stays + a permanent red skull, until a new
         // Light blood splatter on each hit, fading over a few seconds (under the
         // death crack/skull layers).
         .overlay(BloodSplat(trigger: game.hitCount).ignoresSafeArea())
-        // game starts. Crack sits under the skulls.
+        // Death holds: shattered glass stays until a new game starts. Crack sits
+        // under the skulls.
         .overlay(CrackOverlay(seed: game.deathCount, visible: game.dead).ignoresSafeArea())
         // Persistent low-health alarm: pulses amber→red, slow→fast as HP falls.
         .overlay(LowHealthSkull(severity: game.healthSeverity))
         .overlay(DeadSkull(dead: game.dead))
         // Punchy 3× flash on death AND on critical-HP crossings.
         .overlay(DeathFlash(trigger: game.deathCount + game.criticalCount).ignoresSafeArea())
+        // CRT chrome on TOP of the (scrolling) content: scanlines, refresh sweep,
+        // flicker, interference, and a tube vignette — worse as HP falls. Composited
+        // as an overlay (not a layerEffect) because layerEffect can't rasterise the
+        // HUD's ScrollViews — it would blank the readouts.
+        .crtScreen(severity: game.healthSeverity)
         .preferredColorScheme(.dark)
         // Keep the phone awake while the marine is watching the HUD — a soldier
         // doesn't want the tac-computer blanking mid-firefight. Released when the
@@ -481,33 +487,70 @@ private struct DebugHUDView: View {
     // MARK: Standby / no-signal terminal
 
     private var standby: some View {
+        // `lost` = we had a feed and it dropped (red SIGNAL LOST) vs never had one
+        // yet (amber SYSTEM OFFLINE). Either way: a full marine-terminal boot log.
         let lost = game.vitals != nil
         let accent = lost ? Phosphor.danger : Phosphor.amber
-        return VStack(alignment: .leading, spacing: 14) {
-            VStack(alignment: .leading, spacing: 4) {
-                bootLine("> INIT TACTICAL UPLINK")
-                bootLine("> SCANNING LAN · UDP 27999")
-                bootLine(lost ? "> CARRIER LOST" : "> AWAITING CARRIER ........")
+        return VStack(alignment: .leading, spacing: 16) {
+            // Masthead
+            VStack(alignment: .leading, spacing: 2) {
+                Text("MARINE TACTICAL COMPUTER")
+                    .font(.system(.headline, design: .monospaced).weight(.heavy))
+                    .foregroundStyle(Phosphor.amber)
+                    .phosphorGlow(Phosphor.amber, radius: 6)
+                Text("OPERATION ALIEN OVERLORD · STROGGOS  \(AppVersion.string)")
+                    .font(.system(.caption2, design: .monospaced))
+                    .tracking(1)
+                    .foregroundStyle(Phosphor.amberDim)
+                    .lineLimit(1).minimumScaleFactor(0.6)
             }
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text(lost ? "SIGNAL LOST" : "STANDBY")
-                    .font(.system(size: 40, weight: .heavy, design: .monospaced))
+            Rectangle().fill(Phosphor.line).frame(height: 1)
+
+            // Power-on self test — the "system coming up" feel.
+            VStack(alignment: .leading, spacing: 4) {
+                bootLine("> BOOT ROM ............... OK")
+                bootLine("> COMBAT ARMOR LINK ...... OK")
+                bootLine("> BIO-MONITOR ............ OK")
+                bootLine("> THREAT SCANNER ......... OK")
+                bootLine("> SLIPGATE TELEMETRY ..... OK")
+                bootLine("> SCANNING LAN · UDP 27999")
+                bootLine(lost ? "> CARRIER LOST" : "> AWAITING CARRIER ........",
+                         color: lost ? Phosphor.danger : Phosphor.green.opacity(0.7))
+            }
+
+            // Big status word + blinking block.
+            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                Text(lost ? "SIGNAL LOST" : "SYSTEM OFFLINE")
+                    .font(.system(size: 36, weight: .heavy, design: .monospaced))
                     .foregroundStyle(accent)
                     .phosphorGlow(accent, radius: 9)
-                CursorBlock(color: accent, height: 30)
+                    .lineLimit(1).minimumScaleFactor(0.55)
+                CursorBlock(color: accent, height: 28)
             }
-            Text(lost ? "uplink dropped — is the game still running?"
-                      : "start playing on the Quake machine to establish the link.")
+
+            Text(lost ? "// UPLINK DROPPED — IS THE GAME STILL RUNNING?"
+                      : "// START A GAME ON THE QUAKE MACHINE TO ESTABLISH THE LINK")
                 .font(.system(.footnote, design: .monospaced))
-                .foregroundStyle(Phosphor.amberDim)
+                .foregroundStyle(Phosphor.green.opacity(0.85))
+                .fixedSize(horizontal: false, vertical: true)
+
+            // Live prompt — the terminal is awake and waiting.
+            HStack(spacing: 6) {
+                Text(">")
+                    .font(.system(.body, design: .monospaced).weight(.bold))
+                    .foregroundStyle(Phosphor.green)
+                    .phosphorGlow(Phosphor.green, radius: 4)
+                CursorBlock(color: Phosphor.green, height: 16)
+            }
+            .padding(.top, 2)
         }
         .frame(maxWidth: .infinity, minHeight: 320, alignment: .topLeading)
     }
 
-    private func bootLine(_ s: String) -> some View {
+    private func bootLine(_ s: String, color: Color = Phosphor.green.opacity(0.7)) -> some View {
         Text(s)
             .font(.system(.caption, design: .monospaced))
-            .foregroundStyle(Phosphor.green.opacity(0.7))
+            .foregroundStyle(color)
     }
 }
 

@@ -404,24 +404,56 @@ struct HeartBeat: View {
     }
 }
 
-struct ScanlineOverlay: View {
-    /// Retained for source compatibility; the static grid is always drawn and the
-    /// glow always animates while on-screen (TimelineView pauses in background).
-    var active: Bool = true
+/// CRT chrome composited on TOP of the HUD: a static scanline grid, a slow bright
+/// refresh sweep, a gentle flicker, jumping interference lines, and a tube
+/// vignette that darkens the corners (curved-glass illusion) — worse as HP falls.
+///
+/// Why an overlay and not a Metal `layerEffect`: a full-screen shader has to
+/// rasterise the view it post-processes, and SwiftUI can't rasterise `ScrollView`
+/// content — so a layerEffect over the (scrolling) HUD blanks every readout. An
+/// overlay needs no sampling, so it works over the scroll views and bleeds to
+/// every edge. The TimelineView only drives the animation clock and pauses when
+/// the view is off-screen, so there's no background cost.
+struct CRTScreen: ViewModifier {
+    var severity: Double = 0
 
+    func body(content: Content) -> some View {
+        content.overlay(CRTOverlay(severity: severity).ignoresSafeArea())
+    }
+}
+
+extension View {
+    /// Composite the CRT chrome over the whole HUD.
+    func crtScreen(severity: Double = 0) -> some View {
+        modifier(CRTScreen(severity: severity))
+    }
+}
+
+private struct CRTOverlay: View {
+    var severity: Double
     private static let glow = Color(red: 1.0, green: 0.72, blue: 0.15)   // amber phosphor
 
     var body: some View {
         ZStack {
-            // Static scanline grid — drawn once, kept off the per-frame path.
+            // Static scanline grid — drawn once, off the per-frame path.
             Canvas { ctx, size in Self.drawScanlines(&ctx, size) }
-                .allowsHitTesting(false)
-            // Animated phosphor glow.
-            TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { timeline in
+            // Animated phosphor glow: sweep + flicker + interference.
+            TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { tl in
                 Canvas { ctx, size in
-                    Self.drawDynamic(&ctx, size, t: timeline.date.timeIntervalSinceReferenceDate)
+                    Self.drawDynamic(&ctx, size, t: tl.date.timeIntervalSinceReferenceDate)
                 }
-                .allowsHitTesting(false)
+            }
+            // Tube vignette: clear centre → dark corners, biting harder as HP drops.
+            GeometryReader { geo in
+                let r = max(geo.size.width, geo.size.height)
+                RadialGradient(
+                    gradient: Gradient(stops: [
+                        .init(color: .clear, location: 0.0),
+                        .init(color: .clear, location: 0.55),
+                        .init(color: .black.opacity(0.45 + 0.35 * severity), location: 1.0),
+                    ]),
+                    center: .center, startRadius: 0, endRadius: r * 0.72)
+                .blendMode(.multiply)
             }
         }
         .allowsHitTesting(false)
@@ -439,12 +471,11 @@ struct ScanlineOverlay: View {
         }
     }
 
-    /// Animated phosphor glow (per frame).
+    /// Animated phosphor glow (per frame): adds light.
     private static func drawDynamic(_ ctx: inout GraphicsContext, _ size: CGSize, t: Double) {
-        // Everything here ADDS light (phosphor glow).
         ctx.blendMode = .plusLighter
 
-        // 2) Slow bright sweep band travelling top→bottom (~6s loop).
+        // Slow bright sweep band travelling top→bottom (~6s loop).
         let period = 6.0
         let phase = t.truncatingRemainder(dividingBy: period) / period
         let bandH = size.height * 0.18
@@ -459,12 +490,12 @@ struct ScanlineOverlay: View {
                                        startPoint: CGPoint(x: 0, y: bandY),
                                        endPoint: CGPoint(x: 0, y: bandY + bandH)))
 
-        // 3) Gentle global flicker.
+        // Gentle global flicker.
         let flicker = 0.5 + 0.5 * sin(t * 11.0)
         ctx.fill(Path(CGRect(origin: .zero, size: size)),
                  with: .color(glow.opacity(0.012 + 0.016 * flicker)))
 
-        // 4) Interference: a bright line that jumps a couple of times a second.
+        // Interference: a bright line that jumps a couple of times a second.
         let step = (t * 2.5).rounded(.down)
         let frac = sin(step * 91.17) * 0.5 + 0.5
         let ny = CGFloat(frac) * size.height
@@ -562,7 +593,7 @@ struct TerminalHeader: View {
     var live: Bool
     var body: some View {
         HStack(spacing: 8) {
-            Text("USCM·TAC")
+            Text("MARINE·TAC")
                 .font(.system(.caption2, design: .monospaced).weight(.heavy))
                 .tracking(2).foregroundStyle(Phosphor.amberDim)
             Rectangle().fill(Phosphor.amberDim.opacity(0.4)).frame(width: 1, height: 11)
